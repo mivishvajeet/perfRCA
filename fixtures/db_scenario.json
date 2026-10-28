@@ -1,0 +1,60 @@
+{
+  "service": "payment-db",
+  "db_metrics": {
+    "connections": {
+      "active": 142,
+      "idle": 8,
+      "max": 150,
+      "waiters": 55,
+      "avg_wait_ms": 4200
+    },
+    "queries": {
+      "per_second": 1850,
+      "slow_queries_per_second": 340,
+      "avg_duration_ms": 480,
+      "p99_duration_ms": 8200,
+      "full_table_scans_per_second": 28
+    },
+    "locks": {
+      "active_locks": 210,
+      "deadlocks_per_minute": 12,
+      "lock_wait_avg_ms": 3100,
+      "row_lock_contention_pct": 76
+    },
+    "buffer_pool": {
+      "hit_ratio_pct": 62,
+      "size_gb": 8,
+      "used_gb": 7.8,
+      "dirty_pages_pct": 45,
+      "free_pages": 120
+    },
+    "replication": {
+      "lag_seconds": 18,
+      "status": "degraded",
+      "io_thread_running": true,
+      "sql_thread_running": true
+    }
+  },
+  "recent_changes": [
+    {
+      "change": "New payment batch job added processing 5000 txns/min with SELECT FOR UPDATE",
+      "deployed": "2026-10-27T07:00:00Z",
+      "impact": "Row-level locking on payments table under high concurrency"
+    },
+    {
+      "change": "Connection pool max increased from 100 to 150 without adjusting buffer pool",
+      "deployed": "2026-10-26T22:00:00Z",
+      "impact": "Buffer pool now undersized for connection count"
+    },
+    {
+      "change": "Read replica promoted after primary restart; replication still catching up",
+      "deployed": "2026-10-27T06:30:00Z",
+      "impact": "18-second replication lag causing stale reads on replica"
+    }
+  ],
+  "slow_query_samples": [
+    {"query_preview": "SELECT * FROM payments WHERE status = ? AND created_at > ? ORDER BY id FOR UPDATE", "avg_ms": 6800, "calls": 4200, "rows_examined": 12500000},
+    {"query_preview": "UPDATE payments SET status = ?, processor_id = ? WHERE id IN (SELECT id FROM payments WHERE ...)", "avg_ms": 5200, "calls": 1800, "rows_examined": 8900000},
+    {"query_preview": "SELECT COUNT(*) FROM payment_audit_log WHERE payment_id IN (SELECT id FROM payments WHERE batch_id = ?)", "avg_ms": 3100, "calls": 950, "rows_examined": 3400000}
+  ]
+}

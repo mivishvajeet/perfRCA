@@ -1,0 +1,40 @@
+{
+  "run_id": "baseline-2026-10-25-00",
+  "service": "auth-service",
+  "timestamp": "2026-10-25T10:00:00Z",
+  "duration_seconds": 300,
+  "metrics": {
+    "latency": {
+      "p50_ms": 45,
+      "p95_ms": 120,
+      "p99_ms": 250,
+      "mean_ms": 52,
+      "stddev_ms": 18
+    },
+    "throughput": {
+      "requests_per_second": 850,
+      "total_requests": 255000
+    },
+    "error_rate": {
+      "percentage": 0.1,
+      "total_errors": 255,
+      "error_types": {
+        "timeout": 12,
+        "5xx": 45,
+        "4xx": 198
+      }
+    },
+    "resources": {
+      "cpu_percent": 45,
+      "memory_gb": 2.1,
+      "disk_io_mbps": 12.5,
+      "network_mbps": 85.0
+    }
+  },
+  "config": {
+    "db_pool_size": 50,
+    "connection_timeout_ms": 5000,
+    "thread_pool_size": 32,
+    "cache_ttl_seconds": 300
+  }
+}

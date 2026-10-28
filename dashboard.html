@@ -1,0 +1,613 @@
+<title>Perf RCA — Live Dashboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>
+  :root { color-scheme: dark;
+    --bg: #080b12; --surface: #0d1119; --surface2: #131824; --surface3: #1a1f30;
+    --border: #1e2436; --border2: #262d42;
+    --accent: #4f8ff7; --accent2: #7c3aed; --accent-g: rgba(79,143,247,0.13);
+    --fg: #e4e6ef; --fg2: #9ca0b0; --fg3: #5c6176;
+    --good: #34d399; --good-s: rgba(52,211,153,0.12);
+    --warn: #fbbf24; --warn-s: rgba(251,191,36,0.12);
+    --crit: #f87171; --crit-s: rgba(248,113,113,0.12);
+    --serious: #fb923c; --serious-s: rgba(251,146,60,0.12);
+    --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Cascadia Code", "Fira Code", "JetBrains Mono", "Consolas", monospace;
+    --radius: 10px; --radius-sm: 7px; --radius-xs: 4px;
+  }
+  @media(prefers-color-scheme:light){:root:not([data-theme="dark"]){
+    color-scheme:light;--bg:#f3f4f6;--surface:#fff;--surface2:#f7f8fa;--surface3:#ebeef4;
+    --border:#d8dbe3;--border2:#e2e5ea;--accent:#2563eb;--accent2:#6d28d9;--accent-g:rgba(37,99,235,0.08);
+    --fg:#12151c;--fg2:#4a4f5c;--fg3:#8b909d;
+    --good:#16a34a;--good-s:rgba(22,163,74,0.1);--warn:#d97706;--warn-s:rgba(217,119,6,0.1);
+    --crit:#dc2626;--crit-s:rgba(220,38,38,0.1);--serious:#ea580c;--serious-s:rgba(234,88,12,0.1);
+  }}
+  :root[data-theme="light"]{
+    color-scheme:light;--bg:#f3f4f6;--surface:#fff;--surface2:#f7f8fa;--surface3:#ebeef4;
+    --border:#d8dbe3;--border2:#e2e5ea;--accent:#2563eb;--accent2:#6d28d9;--accent-g:rgba(37,99,235,0.08);
+    --fg:#12151c;--fg2:#4a4f5c;--fg3:#8b909d;
+    --good:#16a34a;--good-s:rgba(22,163,74,0.1);--warn:#d97706;--warn-s:rgba(217,119,6,0.1);
+    --crit:#dc2626;--crit-s:rgba(220,38,38,0.1);--serious:#ea580c;--serious-s:rgba(234,88,12,0.1);
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .app{padding:0 max(20px,env(safe-area-inset-left,0px));padding:0 max(20px,env(safe-area-inset-right,0px));padding-block:0;max-width:1400px;margin:0 auto}
+
+  /* Top bar */
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding-block:12px;border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap}
+  .topbar-l{display:flex;align-items:center;gap:10px}
+  .logo{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px}
+  .topbar h1{font-size:17px;font-weight:800;letter-spacing:-0.01em}
+  .topbar-tag{font-size:10px;color:var(--fg3);font-weight:600;text-transform:uppercase;letter-spacing:0.06em}
+  .topbar-r{display:flex;align-items:center;gap:10px}
+  .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+  .status-dot.live{background:var(--good);box-shadow:0 0 8px var(--good);animation:pulse 2s infinite}
+  .status-dot.idle{background:var(--warn)}
+  .status-dot.off{background:var(--crit)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+  .clock{font-family:var(--mono);font-size:12px;color:var(--fg2)}
+  button,.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);border:none;font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
+  .btn-p{background:var(--accent);color:#fff}.btn-p:hover{filter:brightness(1.12)}.btn-p:disabled{opacity:0.4;cursor:not-allowed}
+  .btn-g{background:transparent;color:var(--fg2);border:1px solid var(--border)}.btn-g:hover{background:var(--surface2);color:var(--fg)}
+  .btn-o{background:transparent;color:var(--accent);border:1px solid var(--accent)}.btn-o:hover{background:var(--accent-g)}
+  .btn-sm{padding:5px 11px;font-size:11px}
+  .btn-xs{padding:3px 8px;font-size:10px;border-radius:var(--radius-xs)}
+  input[type=text]{padding:9px 13px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface);color:var(--fg);font:inherit;font-size:12px;outline:none;transition:border-color .15s;flex:1;min-width:200px}
+  input[type=text]:focus{border-color:var(--accent)}
+  input[type=text]::placeholder{color:var(--fg3)}
+
+  /* Grid layout */
+  .main-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  @media(max-width:900px){.main-grid{grid-template-columns:1fr}}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);background:var(--surface2);gap:8px;flex-wrap:wrap}
+  .panel-head h3{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--fg3);display:flex;align-items:center;gap:7px}
+  .panel-head h3 .icon{font-size:16px}
+  .panel-body{padding:14px}
+  .full-width{grid-column:1/-1}
+
+  /* KPI cards */
+  .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+  @media(max-width:700px){.kpi-row{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;text-align:center}
+  .kpi .val{font-size:28px;font-weight:800;font-family:var(--mono);line-height:1.1}
+  .kpi .lbl{font-size:10px;color:var(--fg3);font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-top:4px}
+  .kpi .sub{font-size:11px;color:var(--fg2);margin-top:2px}
+
+  /* Chart panel */
+  .chart-container{position:relative;height:280px}
+  .chart-container canvas,.chart-container svg{width:100%;height:100%}
+  .chart-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11px}
+  .chart-legend span{display:flex;align-items:center;gap:5px;color:var(--fg2)}
+  .chart-legend .swatch{width:10px;height:10px;border-radius:2px;display:inline-block}
+
+  /* Log terminal */
+  .log-term{background:#070a12;border-radius:var(--radius);height:320px;overflow-y:auto;font-family:var(--mono);font-size:11px;padding:10px 14px;line-height:1.7}
+  .log-term .line{display:flex;gap:8px;padding:1px 0}
+  .log-term .ts{color:var(--fg3);white-space:nowrap;flex-shrink:0}
+  .log-term .lvl{font-weight:700;white-space:nowrap;flex-shrink:0;min-width:44px}
+  .log-term .lvl-E{color:var(--crit)}.log-term .lvl-W{color:var(--warn)}.log-term .lvl-I{color:var(--accent)}.log-term .lvl-D{color:var(--fg3)}
+  .log-term .msg{color:var(--fg2);word-break:break-word}
+  .log-term .cursor{animation:blink 1s infinite;color:var(--accent)}@keyframes blink{50%{opacity:0}}
+  .log-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .log-controls{display:flex;gap:6px;margin-left:auto}
+
+  /* Jira list */
+  .issue-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);transition:background .15s}
+  .issue-row:hover{background:var(--surface2);margin:0 -14px;padding-left:14px;padding-right:14px}
+  .issue-row:last-child{border-bottom:none}
+  .issue-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+  .issue-body{flex:1;min-width:0}
+  .issue-key{font-family:var(--mono);font-size:10px;color:var(--fg3);font-weight:600}
+  .issue-title{font-size:13px;font-weight:600;line-height:1.3;margin:2px 0}
+  .issue-meta{display:flex;gap:12px;flex-wrap:wrap;font-size:10px;color:var(--fg3)}
+  .issue-meta span{display:flex;align-items:center;gap:3px}
+  .pill{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:600}
+  .pill-red{background:var(--crit-s);color:var(--crit)}
+  .pill-grn{background:var(--good-s);color:var(--good)}
+  .pill-yel{background:var(--warn-s);color:var(--warn)}
+  .pill-bl{background:var(--accent-g);color:var(--accent)}
+  .pill-or{background:var(--serious-s);color:var(--serious)}
+  .pill-gry{background:var(--surface3);color:var(--fg3)}
+
+  /* Confluence */
+  .conf-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);transition:background .15s}
+  .conf-row:hover{background:var(--surface2);margin:0 -14px;padding-left:14px;padding-right:14px}
+  .conf-row:last-child{border-bottom:none}
+  .conf-body{flex:1;min-width:0}
+  .conf-title{font-size:13px;font-weight:600;line-height:1.3}
+  .conf-excerpt{font-size:11px;color:var(--fg2);margin-top:3px;line-height:1.5}
+  .conf-meta{display:flex;gap:10px;font-size:10px;color:var(--fg3);margin-top:4px;flex-wrap:wrap}
+
+  /* Grafana connect bar */
+  .connect-bar{display:flex;gap:8px;align-items:center;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:14px;flex-wrap:wrap}
+  .connect-bar .connected{color:var(--good);font-size:12px;font-weight:600}
+
+  /* Metric sparklines inline */
+  .mini-spark{display:flex;gap:1px;align-items:end;height:20px}
+  .mini-spark .bar{width:3px;min-height:1px;border-radius:1px 1px 0 0;transition:height .3s}
+
+  /* Scenario tabs */
+  .tabs{display:flex;gap:3px;margin-bottom:12px;padding:3px;background:var(--surface2);border-radius:var(--radius-sm);width:fit-content}
+  .tab{padding:7px 16px;border-radius:var(--radius-xs);font-size:11px;font-weight:600;cursor:pointer;color:var(--fg3);border:none;background:none;transition:all .15s;font-family:inherit}
+  .tab.active{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,0.25)}
+  .tab:hover:not(.active){color:var(--fg2)}
+
+  /* Loading */
+  .spin{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* Section header */
+  .sec-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--fg3);display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .sec-h::after{content:"";flex:1;height:1px;background:var(--border)}
+
+  /* DB health */
+  .health-row{display:flex;gap:10px;flex-wrap:wrap}
+  .health-item{display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--surface2);border-radius:var(--radius-sm);font-size:11px;font-weight:600}
+  .health-dot{width:7px;height:7px;border-radius:50%}
+  .health-dot.ok{background:var(--good)}.health-dot.deg{background:var(--warn)}.health-dot.bad{background:var(--crit)}
+
+  .hidden{display:none!important}
+</style>
+
+<div class="app">
+
+<!-- ═══════════ TOP BAR ═══════════ -->
+<header class="topbar">
+  <div class="topbar-l">
+    <div class="logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+    <div><h1>Perf RCA</h1><div class="topbar-tag">Live Performance Dashboard</div></div>
+  </div>
+  <div class="topbar-r">
+    <span class="clock" id="live-clock">--</span>
+    <span style="font-size:11px;color:var(--fg3)">Agent:</span>
+    <span id="agent-status"><span class="status-dot live"></span> Monitoring</span>
+  </div>
+</header>
+
+<!-- ═══════════ KPI ROW ═══════════ -->
+<div class="kpi-row" id="kpi-row">
+  <div class="kpi"><div class="val" style="color:var(--crit)" id="kpi-anomalies">—</div><div class="lbl">Active Anomalies</div><div class="sub" id="kpi-anomalies-sub"></div></div>
+  <div class="kpi"><div class="val" style="color:var(--accent)" id="kpi-investigations">—</div><div class="lbl">Investigations Today</div><div class="sub" id="kpi-investigations-sub"></div></div>
+  <div class="kpi"><div class="val" style="color:var(--good)" id="kpi-issues">—</div><div class="lbl">Open Jira Issues</div><div class="sub" id="kpi-issues-sub"></div></div>
+  <div class="kpi"><div class="val" style="color:var(--accent2)" id="kpi-uptime">—</div><div class="lbl">Server Uptime</div><div class="sub">Since restart</div></div>
+</div>
+
+<!-- ═══════════ CONNECT BAR ═══════════ -->
+<div class="connect-bar" id="connect-bar">
+  <span style="font-size:14px">📡</span>
+  <input type="text" id="grafana-input" placeholder="Enter Grafana dashboard URL (e.g. https://grafana.example.com/d/auth-service)">
+  <button class="btn btn-p btn-sm" onclick="connectGrafana()">Connect</button>
+  <span class="or-divider" style="font-size:11px;color:var(--fg3)">or</span>
+  <button class="btn btn-g btn-sm" onclick="quickAnalyze()">⚡ Quick Demo</button>
+  <span id="connect-status" style="font-size:11px;color:var(--fg3)">Standalone mode (simulated data)</span>
+</div>
+
+<!-- ═══════════ MAIN GRID ═══════════ -->
+<div class="main-grid">
+
+  <!-- ── LEFT COLUMN ─────────────────── -->
+  <!-- Metric charts -->
+  <div class="panel">
+    <div class="panel-head"><h3><span class="icon">📈</span> Live Metrics — auth-service</h3><span style="font-size:10px;color:var(--fg3)">Past 60 min • 1-min interval</span></div>
+    <div class="panel-body" style="padding:6px 14px 10px">
+      <div class="chart-container" id="chart-container">
+        <svg id="main-chart" width="100%" height="280" style="overflow:visible"></svg>
+      </div>
+      <div class="chart-legend">
+        <span><span class="swatch" style="background:var(--accent)"></span> P99 Latency</span>
+        <span><span class="swatch" style="background:var(--crit)"></span> Error Rate</span>
+        <span><span class="swatch" style="background:var(--good)"></span> Throughput</span>
+        <span><span class="swatch" style="background:var(--warn)"></span> CPU</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- DB metrics panel -->
+  <div class="panel" id="db-panel" style="display:none">
+    <div class="panel-head"><h3><span class="icon">🗄</span> Database Metrics — payment-db</h3></div>
+    <div class="panel-body" id="db-metrics-body"></div>
+  </div>
+
+  <!-- Log terminal -->
+  <div class="panel">
+    <div class="panel-head">
+      <h3><span class="icon">📋</span> Log Terminal</h3>
+      <div class="log-controls">
+        <button class="btn btn-xs btn-g" onclick="toggleAutoScroll()" id="btn-autoscroll">⏸ Pause Scroll</button>
+        <button class="btn btn-xs btn-g" onclick="downloadLogs()">📥 Download</button>
+        <button class="btn btn-xs btn-g" onclick="clearLogs()">🗑 Clear</button>
+      </div>
+    </div>
+    <div class="panel-body" style="padding:0">
+      <div class="log-term" id="log-term"></div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT COLUMN ────────────────── -->
+  <!-- Jira issues -->
+  <div class="panel">
+    <div class="panel-head">
+      <h3><span class="icon">🎫</span> Recent Jira Issues</h3>
+      <button class="btn btn-xs btn-o" onclick="refreshJira()">🔄 Refresh</button>
+    </div>
+    <div class="panel-body" id="jira-body"></div>
+  </div>
+
+  <!-- Confluence reports -->
+  <div class="panel">
+    <div class="panel-head">
+      <h3><span class="icon">📄</span> Recent Confluence Reports</h3>
+      <button class="btn btn-xs btn-o" onclick="refreshConfluence()">🔄 Refresh</button>
+    </div>
+    <div class="panel-body" id="conf-body"></div>
+  </div>
+
+</div>
+
+<!-- ═══════════ SERVICE HEALTH BAR ═══════════ -->
+<div style="margin-top:14px" class="panel">
+  <div class="panel-head"><h3><span class="icon">🫀</span> Service Health</h3></div>
+  <div class="panel-body">
+    <div class="health-row" id="health-row"></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ── State ───────────────────────────────────────────────────────────
+const API = '/api/investigate';
+let scenario = 'demo';
+let grafanaConnected = false;
+let autoScroll = true;
+let chartData = [];
+let logEntries = [];
+let jiraIssues = [];
+let confReports = [];
+let serverStart = Date.now();
+
+// ── Helpers ─────────────────────────────────────────────────────────
+function $(id){return document.getElementById(id)}
+function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+// ── Live clock ──────────────────────────────────────────────────────
+setInterval(()=>{
+  const n=new Date();
+  $('live-clock').textContent = n.toLocaleTimeString('en-US',{hour12:false});
+},1000);
+
+// ── Uptime timer ────────────────────────────────────────────────────
+setInterval(()=>{
+  const s=Math.floor((Date.now()-serverStart)/1000);
+  const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);
+  $('kpi-uptime').textContent = `${h}h ${m}m`;
+},5000);
+
+// ── Simulated Jira data ─────────────────────────────────────────────
+const SIM_JIRA = [
+  {key:"PERF-847",summary:"auth-service: Thread Pool Exhaustion Causing Timeout Cascade",type:"Bug",priority:"Highest",status:"Open",assignee:"on-call-engineer",created:"2026-10-27T09:30",service:"auth-service",labels:["perf-regression","auto-detected","rca","p0"]},
+  {key:"PERF-845",summary:"payment-db: Row Lock Contention Under High Batch Job Load",type:"Bug",priority:"High",status:"In Progress",assignee:"dba-team",created:"2026-10-27T07:45",service:"payment-db",labels:["perf-regression","db","locks"]},
+  {key:"PERF-840",summary:"api-gateway: Memory leak detected after 48h uptime",type:"Bug",priority:"Medium",status:"Open",assignee:"platform-team",created:"2026-10-26T18:20",service:"api-gateway",labels:["memory-leak","auto-detected"]},
+  {key:"PERF-835",summary:"notification-service: Kafka consumer lag spike peak hours",type:"Story",priority:"High",status:"In Review",assignee:"stream-team",created:"2026-10-26T10:15",service:"notification-service",labels:["kafka","consumer-lag"]},
+  {key:"PERF-831",summary:"search-service: P99 > 2s for wildcard queries under load",type:"Bug",priority:"Critical",status:"Open",assignee:"search-team",created:"2026-10-25T22:00",service:"search-service",labels:["latency","p0","wildcard"]},
+  {key:"PERF-827",summary:"user-service: Connection pool exhaustion after 3x surge",type:"Bug",priority:"Highest",status:"Resolved",assignee:"infra-team",created:"2026-10-25T14:30",service:"user-service",labels:["connection-pool","resolved"]},
+  {key:"PERF-822",summary:"order-service: GC pauses > 500ms causing intermittent timeouts",type:"Bug",priority:"Medium",status:"In Progress",assignee:"jvm-team",created:"2026-10-24T09:00",service:"order-service",labels:["gc","java","timeouts"]},
+];
+const SIM_CONF = [
+  {id:"CONF-312",title:"RCA: auth-service Performance Regression — Oct 27",author:"PerfRCA Agent",space:"Engineering/Perf",date:"2026-10-27T09:35",service:"auth-service",excerpt:"Thread pool reduction from 32 to 24 identified as root cause. Rollback restores baseline."},
+  {id:"CONF-310",title:"RCA: payment-db Lock Contention Investigation — Oct 27",author:"PerfRCA Agent",space:"Engineering/Perf",date:"2026-10-27T08:00",service:"payment-db",excerpt:"New batch job with SELECT FOR UPDATE caused row-level locking. Index optimization recommended."},
+  {id:"CONF-305",title:"RCA: search-service Latency Spike Analysis — Oct 26",author:"search-engineer",space:"Engineering/Search",date:"2026-10-26T16:00",service:"search-service",excerpt:"Wildcard queries without prefix led to full index scans. Added n-gram tokenizer."},
+  {id:"CONF-301",title:"Monthly Perf Review: Q4 Service Health Report",author:"perf-lead",space:"Engineering/Perf",date:"2026-10-25T12:00",service:"platform",excerpt:"Platform P99 improved 15% MoM. Three regressions detected and resolved within SLA."},
+];
+
+// ── Service health config ───────────────────────────────────────────
+const SERVICES = [
+  {name:"auth-service",status:"degraded",latency:"620ms",errRate:"2.8%"},
+  {name:"payment-db",status:"degraded",latency:"8200ms",errRate:"0.9%"},
+  {name:"api-gateway",status:"healthy",latency:"45ms",errRate:"0.1%"},
+  {name:"notification-svc",status:"healthy",latency:"120ms",errRate:"0.0%"},
+  {name:"search-service",status:"critical",latency:"2100ms",errRate:"1.2%"},
+  {name:"user-service",status:"healthy",latency:"80ms",errRate:"0.05%"},
+];
+
+// ── Generate chart data (simulated 60-min time series) ──────────────
+function genChartData(){
+  const data=[];
+  for(let i=0;i<60;i++){
+    const t=new Date(Date.now()-(59-i)*60000);
+    const ts=t.toTimeString().slice(0,5);
+    if(i<40){
+      data.push({time:ts,p99:250+Math.random()*30,err:0.08+Math.random()*0.06,thr:840+Math.random()*30,cpu:44+Math.random()*6});
+    }else{
+      const d=i-40;
+      data.push({time:ts,p99:380+d*8+Math.random()*40,err:0.5+d*0.12+Math.random()*0.1,thr:800-d*8+Math.random()*30,cpu:55+d*1.5+Math.random()*8});
+    }
+  }
+  return data;
+}
+
+// ── Render SVG chart ────────────────────────────────────────────────
+function renderChart(){
+  const d=chartData;
+  if(!d.length)return;
+  const W=$('main-chart').clientWidth||620;
+  const H=280,pad={t:20,r:30,b:30,l:55},w=W-pad.l-pad.r,h=H-pad.t-pad.b;
+
+  // Scales
+  const xS=i=>(i/(d.length-1))*w;
+  const ranges={p99:[200,700],err:[0,3.2],thr:[500,900],cpu:[30,100]};
+  const yS=(v,range)=>pad.t+h-(v-range[0])/(range[1]-range[0])*h;
+
+  let svg=`<rect x="0" y="0" width="${W}" height="${H}" fill="transparent"/>`;
+
+  // Grid lines
+  for(let i=0;i<=4;i++){
+    const y=pad.t+(h/4)*i;
+    svg+=`<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="var(--border)" stroke-width="0.5" opacity="0.5"/>`;
+    const vP99=700-(700-200)*(i/4);
+    svg+=`<text x="${pad.l-5}" y="${y+4}" fill="var(--fg3)" font-size="9" text-anchor="end" font-family="monospace">${Math.round(vP99)}</text>`;
+  }
+
+  // Lines
+  function drawLine(key,color,range){
+    let path=`M${pad.l+xS(0)},${yS(d[0][key],range)}`;
+    for(let i=1;i<d.length;i++){
+      const cpx1=pad.l+xS(i-1)+w/d.length/2,cpy1=yS(d[i-1][key],range);
+      const cpx2=pad.l+xS(i)-w/d.length/2,cpy2=yS(d[i][key],range);
+      path+=` C${cpx1},${cpy1} ${cpx2},${cpy2} ${pad.l+xS(i)},${yS(d[i][key],range)}`;
+    }
+    return `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
+  }
+
+  svg+=drawLine('p99','var(--accent)',ranges.p99);
+  svg+=drawLine('err','var(--crit)',ranges.err);
+  svg+=drawLine('thr','var(--good)',ranges.thr);
+  svg+=drawLine('cpu','var(--warn)',ranges.cpu);
+
+  // Deploy marker
+  const deployX=pad.l+xS(40);
+  svg+=`<line x1="${deployX}" y1="${pad.t}" x2="${deployX}" y2="${pad.t+h}" stroke="var(--crit)" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.7"/>`;
+  svg+=`<text x="${deployX+4}" y="${pad.t+12}" fill="var(--crit)" font-size="9" font-weight="700">deploy a1b2c3d</text>`;
+
+  $('main-chart').innerHTML=svg;
+}
+
+// ── Log streaming ───────────────────────────────────────────────────
+const LOG_TEMPLATES = [
+  {ts:"09:14:50",lvl:"INFO",msg:"Starting performance test run current-2026-10-27-00",svc:"auth-service"},
+  {ts:"09:14:52",lvl:"INFO",msg:"Warmup phase complete, entering steady state",svc:"auth-service"},
+  {ts:"09:14:58",lvl:"WARN",msg:"Connection pool wait time exceeded threshold: 3500ms (limit 3000ms)",svc:"auth-service"},
+  {ts:"09:14:58",lvl:"ERROR",msg:"Timeout acquiring connection from pool after 5000ms for request req-0100",svc:"auth-service"},
+  {ts:"09:14:59",lvl:"ERROR",msg:"Timeout acquiring connection from pool after 5000ms for request req-0101",svc:"auth-service"},
+  {ts:"09:15:00",lvl:"ERROR",msg:"Internal error: Thread pool exhausted, rejecting request req-0200",svc:"auth-service"},
+  {ts:"09:15:01",lvl:"ERROR",msg:"Internal error: Thread pool exhausted, rejecting request req-0201",svc:"auth-service"},
+  {ts:"09:15:02",lvl:"ERROR",msg:"Timeout acquiring connection from pool after 5000ms for request req-0206",svc:"auth-service"},
+  {ts:"09:15:03",lvl:"ERROR",msg:"Timeout acquiring connection from pool after 5000ms for request req-0209",svc:"auth-service"},
+  {ts:"09:15:04",lvl:"ERROR",msg:"Internal error: Thread pool exhausted, rejecting request req-0211",svc:"auth-service"},
+  {ts:"09:15:05",lvl:"WARN",msg:"High CPU usage detected: 88% (threshold 75%)",svc:"auth-service"},
+  {ts:"09:15:06",lvl:"WARN",msg:"High CPU usage detected: 87% (threshold 75%)",svc:"auth-service"},
+  {ts:"09:15:07",lvl:"WARN",msg:"Memory pressure: 3.7 GB allocated (limit 4.0 GB)",svc:"auth-service"},
+  {ts:"09:15:11",lvl:"INFO",msg:"Performance test complete. Duration: 298s, Requests: 181780, Errors: 5090",svc:"auth-service"},
+];
+const LIVE_MSGS = [
+  "Auth token validated for request req-NNNN",
+  "Cache hit ratio: 0.NN (threshold 0.85)",
+  "Request completed in NNms (P95 threshold 500ms)",
+  "Healthcheck passed: NN/NN services healthy",
+  "Garbage collection completed in NNms",
+  "Connection pool: N active, M idle (max 150)",
+  "Rate limiter engaged: N requests throttled",
+  "DB query executed in NNms",
+  "WebSocket connection established for client N",
+  "Metric snapshot saved to storage backend",
+];
+
+let logIdx=0,streamRunning=true;
+
+function addLogLine(entry){
+  logEntries.push(entry);
+  if(logEntries.length>500)logEntries.shift();
+  const term=$('log-term');
+  const lvlC={ERROR:'E',WARN:'W',INFO:'I',DEBUG:'D'};
+  const c=lvlC[entry.lvl]||'I';
+  const line=document.createElement('div');
+  line.className='line';
+  line.innerHTML=`<span class="ts">${esc(entry.ts)}</span><span class="lvl lvl-${c}">${esc(entry.lvl)}</span><span class="msg">[${esc(entry.svc||'')}] ${esc(entry.msg)}</span>`;
+  term.appendChild(line);
+  if(autoScroll)term.scrollTop=term.scrollHeight;
+  // Update KPI
+  const errors=logEntries.filter(e=>e.lvl==='ERROR').length;
+  const warns=logEntries.filter(e=>e.lvl==='WARN').length;
+  $('kpi-anomalies').textContent=errors;
+  $('kpi-anomalies-sub').textContent=`${warns} warnings`;
+}
+
+function streamLog(){
+  if(streamRunning&&logIdx<LOG_TEMPLATES.length){
+    addLogLine(LOG_TEMPLATES[logIdx]);
+    logIdx++;
+    setTimeout(streamLog,150+Math.random()*300);
+  }else if(streamRunning){
+    // Once template done, generate live entries
+    const now=new Date();
+    const ts=now.toTimeString().slice(0,8);
+    const lvls=['INFO','INFO','INFO','DEBUG','WARN','ERROR'];
+    const w=[0.5,0.5,0.5,0.3,0.08,0.04];
+    const r=Math.random();
+    let acc=0,lvl='INFO';
+    for(let i=0;i<lvls.length;i++){acc+=w[i];if(r<acc){lvl=lvls[i];break}}
+    const msg=LIVE_MSGS[Math.floor(Math.random()*LIVE_MSGS.length)].replace(/N+/g,()=>Math.floor(Math.random()*999));
+    addLogLine({ts,lvl,msg,svc:'auth-service'});
+    setTimeout(streamLog,800+Math.random()*2500);
+  }
+}
+
+function toggleAutoScroll(){
+  autoScroll=!autoScroll;
+  $('btn-autoscroll').textContent=autoScroll?'⏸ Pause Scroll':'▶ Resume Scroll';
+}
+function clearLogs(){$('log-term').innerHTML='';logEntries=[]}
+
+async function downloadLogs(){
+  const a=document.createElement('a');a.href='/api/logs/download';a.download='auth-service.log';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+
+// ── Jira rendering ──────────────────────────────────────────────────
+function renderJira(issues){
+  jiraIssues=issues||SIM_JIRA;
+  const open=jiraIssues.filter(i=>i.status!=='Resolved').length;
+  const crit=jiraIssues.filter(i=>i.priority==='Critical'||i.priority==='Highest').length;
+  $('kpi-issues').textContent=open;
+  $('kpi-issues-sub').textContent=`${crit} critical`;
+  const pri={Highest:'pill-red',Critical:'pill-red',High:'pill-or',Medium:'pill-yel',Low:'pill-gry'};
+  const typIcon={Bug:'🐛',Story:'📖',Task:'✅'};
+  $('jira-body').innerHTML=jiraIssues.map(i=>`
+    <div class="issue-row">
+      <div class="issue-icon">${typIcon[i.type]||'📋'}</div>
+      <div class="issue-body">
+        <div class="issue-key">${esc(i.key)}</div>
+        <div class="issue-title">${esc(i.summary)}</div>
+        <div class="issue-meta">
+          <span><span class="pill ${pri[i.priority]||'pill-gry'}">${i.priority}</span></span>
+          <span>📌 ${esc(i.status)}</span>
+          <span>👤 ${esc(i.assignee)}</span>
+          <span>📅 ${esc(i.created)}</span>
+          <span>🏷 ${esc(i.service)}</span>
+        </div>
+        <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${(i.labels||[]).map(l=>`<span class="pill pill-bl">${esc(l)}</span>`).join('')}</div>
+      </div>
+    </div>`).join('');
+}
+function refreshJira(){renderJira(SIM_JIRA)}
+
+// ── Confluence rendering ────────────────────────────────────────────
+function renderConfluence(reports){
+  confReports=reports||SIM_CONF;
+  $('kpi-investigations').textContent=confReports.length;
+  $('kpi-investigations-sub').textContent='reports generated';
+  $('conf-body').innerHTML=confReports.map(r=>`
+    <div class="conf-row">
+      <div style="font-size:16px;flex-shrink:0">📄</div>
+      <div class="conf-body">
+        <div class="conf-title">${esc(r.title)}</div>
+        <div class="conf-excerpt">${esc(r.excerpt)}</div>
+        <div class="conf-meta">
+          <span>📂 ${esc(r.space)}</span>
+          <span>👤 ${esc(r.author)}</span>
+          <span>📅 ${esc(r.date)}</span>
+          <span>🏷 ${esc(r.service)}</span>
+          <span>👁 ${esc(r.visibility||'Team')}</span>
+        </div>
+      </div>
+    </div>`).join('');
+}
+function refreshConfluence(){renderConfluence(SIM_CONF)}
+
+// ── Service health ──────────────────────────────────────────────────
+function renderHealth(){
+  $('health-row').innerHTML=SERVICES.map(s=>{
+    const cls=s.status==='healthy'?'ok':s.status==='degraded'?'deg':'bad';
+    const lbl=s.status==='healthy'?'Healthy':s.status==='degraded'?'Degraded':'Critical';
+    return `<div class="health-item"><span class="health-dot ${cls}"></span>${s.name} — ${lbl} (${s.latency} / ${s.errRate} err)</div>`;
+  }).join('');
+}
+
+// ── DB metrics panel ────────────────────────────────────────────────
+async function loadDbMetrics(){
+  try{
+    const r=await fetch('/api/db-metrics');
+    if(!r.ok)return;
+    const d=await r.json();
+    showDbPanel(d);
+  }catch(e){}
+}
+function showDbPanel(d){
+  $('db-panel').style.display='';
+  const dm=d.db_metrics;
+  $('db-metrics-body').innerHTML=`
+    <div class="health-row" style="margin-bottom:10px">
+      <div class="health-item"><span class="health-dot ${dm.connections.active>120?'bad':'deg'}"></span>Connections: ${dm.connections.active}/${dm.connections.max} (${dm.connections.waiters} waiters)</div>
+      <div class="health-item"><span class="health-dot ${dm.queries.slow_queries_per_second>100?'bad':'deg'}"></span>Slow Queries: ${dm.queries.slow_queries_per_second}/s</div>
+      <div class="health-item"><span class="health-dot ${dm.locks.row_lock_contention_pct>50?'bad':'deg'}"></span>Row Lock Contention: ${dm.locks.row_lock_contention_pct}%</div>
+      <div class="health-item"><span class="health-dot ${dm.buffer_pool.hit_ratio_pct<70?'bad':'deg'}"></span>Buffer Pool Hit: ${dm.buffer_pool.hit_ratio_pct}%</div>
+      <div class="health-item"><span class="health-dot ${dm.replication.lag_seconds>10?'bad':'deg'}"></span>Replication Lag: ${dm.replication.lag_seconds}s</div>
+    </div>
+    <div class="sec-h" style="margin-top:6px">Slow Queries</div>
+    ${(d.slow_query_samples||[]).map(q=>`
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:6px">
+        <code style="font-family:var(--mono);font-size:10px;color:var(--warn);display:block;word-break:break-all">${esc(q.query_preview)}</code>
+        <div style="font-size:10px;color:var(--fg3);margin-top:4px">Avg ${q.avg_ms}ms • ${q.calls.toLocaleString()} calls • ${(q.rows_examined/1e6).toFixed(1)}M rows examined</div>
+      </div>`).join('')}
+    <div class="sec-h" style="margin-top:10px">Recent Changes</div>
+    ${(d.recent_changes||[]).map(c=>`
+      <div style="font-size:11px;padding:4px 0;color:var(--fg2)">
+        <strong style="color:var(--fg)">${esc(c.change)}</strong><br>
+        <span style="color:var(--fg3)">Deployed ${esc(c.deployed)} — ${esc(c.impact)}</span>
+      </div>`).join('')}
+  `;
+}
+
+// ── Grafana connect (simulated) ─────────────────────────────────────
+async function connectGrafana(){
+  const url=$('grafana-input').value.trim();
+  if(!url){alert('Please enter a Grafana dashboard URL');return}
+  $('connect-status').innerHTML='<span class="spin"></span> Connecting…';
+
+  // Try real endpoint first
+  try{
+    const r=await fetch('/api/grafana/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({grafana_url:url})});
+    if(r.ok){
+      const d=await r.json();
+      grafanaConnected=true;
+      $('connect-status').innerHTML=`<span class="connected">✅ Connected</span> — ${d.dashboards_found} dashboards, ${d.panels_found} panels, ${d.services.length} services`;
+      refreshChartData();
+      return;
+    }
+  }catch(e){}
+
+  // Fallback: simulate for demo
+  grafanaConnected=true;
+  $('connect-status').innerHTML=`<span class="connected">✅ Simulated</span> — Connected to ${esc(url)} — 4 dashboards, 26 panels found`;
+  $('agent-status').innerHTML='<span class="status-dot live"></span> Connected to Grafana';
+  refreshChartData();
+}
+
+// ── Refresh chart with updated data ─────────────────────────────────
+function refreshChartData(){
+  chartData=genChartData();
+  renderChart();
+}
+async function quickAnalyze(){refreshChartData()}
+
+// ── Scene switching ─────────────────────────────────────────────────
+function selectScenario(id){
+  scenario=id;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  event.target.classList.add('active');
+  if(id==='db'){
+    loadDbMetrics();
+  }else{
+    $('db-panel').style.display='none';
+  }
+}
+
+// ── Init ─────────────────────────────────────────────────────────────
+function init(){
+  chartData=genChartData();
+  renderChart();
+  streamLog();
+  renderJira();
+  renderConfluence();
+  renderHealth();
+  loadDbMetrics();
+  $('live-clock').textContent=new Date().toLocaleTimeString('en-US',{hour12:false});
+}
+
+// Handle resize
+window.addEventListener('resize',()=>renderChart());
+
+// Init now
+init();
+</script>

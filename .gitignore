@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.env
+*.log
+.DS_Store
+Thumbs.db
+memory/cases.json
+*.zip
+dist/
+build/.claude/*
