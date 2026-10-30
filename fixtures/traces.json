@@ -1,0 +1,50 @@
+{
+  "traces": [
+    {
+      "trace_id": "abc123def456",
+      "service": "auth-service",
+      "status": "error",
+      "duration_ms": 620,
+      "timestamp": "2026-10-27T09:15:00Z",
+      "spans": [
+        {"span_id": "s1", "name": "HTTP POST /auth/validate", "duration_ms": 620, "status": "error", "parent_span_id": null},
+        {"span_id": "s2", "name": "db.connection.acquire", "duration_ms": 580, "status": "error", "parent_span_id": "s1", "error": "Timeout acquiring connection from pool"},
+        {"span_id": "s3", "name": "thread.pool.execute", "duration_ms": 600, "status": "error", "parent_span_id": "s1", "error": "Thread pool exhausted"}
+      ]
+    },
+    {
+      "trace_id": "def789ghi012",
+      "service": "auth-service",
+      "status": "ok",
+      "duration_ms": 52,
+      "timestamp": "2026-10-25T10:01:00Z",
+      "spans": [
+        {"span_id": "s4", "name": "HTTP POST /auth/validate", "duration_ms": 52, "status": "ok", "parent_span_id": null},
+        {"span_id": "s5", "name": "db.connection.acquire", "duration_ms": 8, "status": "ok", "parent_span_id": "s4"},
+        {"span_id": "s6", "name": "cache.get", "duration_ms": 2, "status": "ok", "parent_span_id": "s4"}
+      ]
+    },
+    {
+      "trace_id": "ghi345jkl678",
+      "service": "payment-db",
+      "status": "error",
+      "duration_ms": 8200,
+      "timestamp": "2026-10-27T09:15:03Z",
+      "spans": [
+        {"span_id": "s7", "name": "SELECT FOR UPDATE payments", "duration_ms": 8200, "status": "error", "parent_span_id": null, "error": "Lock wait timeout exceeded"},
+        {"span_id": "s8", "name": "row.lock.acquire", "duration_ms": 8190, "status": "error", "parent_span_id": "s7", "error": "Deadlock detected"}
+      ]
+    }
+  ],
+  "service_map": {
+    "nodes": [
+      {"id": "auth-service", "type": "service", "status": "degraded"},
+      {"id": "payment-db", "type": "database", "status": "critical"},
+      {"id": "cache", "type": "cache", "status": "healthy"}
+    ],
+    "edges": [
+      {"from": "auth-service", "to": "payment-db", "error_rate": 2.8, "avg_latency_ms": 580},
+      {"from": "auth-service", "to": "cache", "error_rate": 0.1, "avg_latency_ms": 5}
+    ]
+  }
+}

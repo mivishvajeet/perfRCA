@@ -9,4 +9,9 @@ Thumbs.db
 memory/cases.json
 *.zip
 dist/
-build/.claude/*
+*.db
+*.db-shm
+*.db-wal
+platform.db*
+connectors_config.json
+

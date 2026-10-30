@@ -9,28 +9,68 @@ Endpoints:
   GET  /api/db-metrics      — Get DB scenario metrics.
   GET  /api/scenarios       — List available demo scenarios.
   GET  /                    — Serve frontend HTML.
+
+  GET  /api/health                   — Service health check.
+  GET  /api/connectors/status        — List connector statuses.
+  POST /api/connectors/test          — Test a specific connector.
+  GET  /api/incidents                — List incidents (filter: status, severity, service).
+  GET  /api/incidents/{id}           — Get single incident.
+  GET  /api/incidents/{id}/timeline  — Get incident timeline.
+  POST /api/incidents                — Create incident.
+  POST /api/incidents/{id}/acknowledge  — Acknowledge incident.
+  POST /api/incidents/{id}/resolve      — Resolve incident.
+  POST /api/incidents/{id}/reopen       — Reopen incident.
+  POST /api/incidents/{id}/link-investigation — Link RCA to incident.
+  GET  /api/alerts                   — List alerts.
+  POST /api/alerts                   — Create alert.
+  GET  /api/logs/search              — Search log entries.
+  GET  /api/logs/patterns            — Get error patterns from logs.
+  GET  /api/metrics/summary          — Metrics summary from fixture data.
+  GET  /api/metrics/series           — Time-series data for a metric.
+  GET  /api/metrics/anomalies        — Anomaly intervals.
+  GET  /api/metrics/export           — Download metrics CSV.
+  GET  /api/deployments              — List commits from fixtures.
+  GET  /api/cases                    — List stored cases.
+  GET  /api/cases/search             — Search cases by symptom.
+  POST /api/cases/{id}/confirm       — Confirm a root cause case.
+  GET  /api/saved-searches           — List saved searches.
+  POST /api/saved-searches           — Save a search.
+  GET  /api/traces                   — Return fixture trace data.
 """
 
 import json
 import sys
 import os
 import io
+import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
+from datetime import datetime, timezone
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from agent.engine import PerfRCAAgent
 from agent.log_analyzer import analyze_logs
+from store import PlatformStore
+from connectors import ConnectorRegistry
+from agent.parsers import normalize_entries, search_entries
+from agent.metrics_engine import (
+    generate_time_series, get_metrics_summary,
+    get_anomaly_intervals, export_metrics_csv,
+)
 
-HOST = "127.0.0.1"
-PORT = 8080
+HOST = os.environ.get("PERF_RCA_HOST", "0.0.0.0")
+PORT = int(os.environ.get("PERF_RCA_PORT", "8080"))
 MAX_PAYLOAD_BYTES = 5_000_000
+
+_SERVER_START_TIME = time.monotonic()
 
 agent = PerfRCAAgent()
 current_logs = None  # holds uploaded logs in memory for analysis
+store = PlatformStore(PROJECT_ROOT / "platform.db")
+connectors = ConnectorRegistry(PROJECT_ROOT)
 
 STATIC_DIR = PROJECT_ROOT
 
@@ -46,6 +86,14 @@ MIME_TYPES = {
     ".ico": "image/x-icon",
 }
 
+# Keys that are never allowed in request bodies
+_DANGEROUS_KEY_PATTERNS = ("__", "exec", "eval", "import", "os.", "sys.")
+
+
+def _is_dangerous_key(key: str) -> bool:
+    key_lower = key.lower()
+    return any(p in key_lower for p in _DANGEROUS_KEY_PATTERNS)
+
 
 class RequestHandler(BaseHTTPRequestHandler):
 
@@ -55,17 +103,80 @@ class RequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
+        qs = parse_qs(parsed.query)
 
+        # ── Static / frontend ──────────────────────────────────────────
         if path == "/":
             self._serve_frontend()
-        elif path == "/api/memory":
-            self._handle_memory_get()
+
+        # ── Platform API ───────────────────────────────────────────────
+        elif path == "/api/health":
+            self._handle_health()
+
+        elif path == "/api/connectors/status":
+            self._handle_connectors_status()
+
+        elif path == "/api/incidents":
+            self._handle_incidents_list(qs)
+
+        elif path.startswith("/api/incidents/"):
+            parts = path.split("/")
+            # /api/incidents/{id} or /api/incidents/{id}/timeline
+            if len(parts) == 4:
+                self._handle_incident_get(parts[3])
+            elif len(parts) == 5 and parts[4] == "timeline":
+                self._handle_incident_timeline(parts[3])
+            else:
+                self._json_response(404, {"error": "Not found", "path": path})
+
+        elif path == "/api/alerts":
+            self._handle_alerts_list(qs)
+
+        elif path == "/api/logs/search":
+            self._handle_logs_search(qs)
+
+        elif path == "/api/logs/patterns":
+            self._handle_logs_patterns()
+
         elif path == "/api/logs/download":
             self._handle_logs_download()
+
+        elif path == "/api/metrics/summary":
+            self._handle_metrics_summary(qs)
+
+        elif path == "/api/metrics/series":
+            self._handle_metrics_series(qs)
+
+        elif path == "/api/metrics/anomalies":
+            self._handle_metrics_anomalies(qs)
+
+        elif path == "/api/metrics/export":
+            self._handle_metrics_export(qs)
+
+        elif path == "/api/memory":
+            self._handle_memory_get()
+
+        elif path == "/api/deployments":
+            self._handle_deployments()
+
+        elif path == "/api/cases":
+            self._handle_cases_list(qs)
+
+        elif path == "/api/cases/search":
+            self._handle_cases_search(qs)
+
+        elif path == "/api/saved-searches":
+            self._handle_saved_searches_list()
+
+        elif path == "/api/traces":
+            self._handle_traces()
+
         elif path == "/api/db-metrics":
             self._handle_db_metrics()
+
         elif path == "/api/scenarios":
             self._handle_scenarios()
+
         elif path.startswith("/static/"):
             self._serve_static(path[len("/static/"):])
         else:
@@ -81,6 +192,42 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._handle_retest()
         elif path == "/api/logs/upload":
             self._handle_logs_upload()
+        elif path == "/api/connectors/test":
+            self._handle_connectors_test()
+        elif path == "/api/incidents":
+            self._handle_incidents_create()
+        elif path == "/api/alerts":
+            self._handle_alerts_create()
+        elif path == "/api/saved-searches":
+            self._handle_saved_searches_create()
+
+        elif path.startswith("/api/incidents/"):
+            parts = path.split("/")
+            # /api/incidents/{id}/acknowledge|resolve|reopen|link-investigation
+            if len(parts) == 5:
+                incident_id = parts[3]
+                action = parts[4]
+                if action == "acknowledge":
+                    self._handle_incident_acknowledge(incident_id)
+                elif action == "resolve":
+                    self._handle_incident_resolve(incident_id)
+                elif action == "reopen":
+                    self._handle_incident_reopen(incident_id)
+                elif action == "link-investigation":
+                    self._handle_incident_link_investigation(incident_id)
+                else:
+                    self._json_response(404, {"error": "Unknown action", "path": path})
+            else:
+                self._json_response(404, {"error": "Not found", "path": path})
+
+        elif path.startswith("/api/cases/"):
+            parts = path.split("/")
+            # /api/cases/{id}/confirm
+            if len(parts) == 5 and parts[4] == "confirm":
+                self._handle_case_confirm(parts[3])
+            else:
+                self._json_response(404, {"error": "Not found", "path": path})
+
         else:
             self._json_response(404, {"error": "Not found", "path": path})
 
@@ -135,6 +282,21 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._json_response(400, {"error": "Invalid JSON", "detail": str(e)})
             return None
 
+    def _validate_body(self, body):
+        """Reject dangerous keys. Returns True if safe."""
+        if not isinstance(body, dict):
+            self._json_response(400, {"error": "Request body must be a JSON object."})
+            return False
+        dangerous_keys = [k for k in body if _is_dangerous_key(k)]
+        if dangerous_keys:
+            self._json_response(400, {"error": "Invalid request keys detected.", "keys": dangerous_keys})
+            return False
+        return True
+
+    def _qs_first(self, qs, key, default=None):
+        vals = qs.get(key, [])
+        return vals[0] if vals else default
+
     def _serve_frontend(self):
         html_path = PROJECT_ROOT / "index.html"
         if not html_path.exists():
@@ -167,6 +329,467 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
 
+    # ── API: Health ───────────────────────────────────────────────────
+
+    def _handle_health(self):
+        db_ok = store.ping()
+        self._json_response(200, {
+            "status": "ok",
+            "version": "2.0.0",
+            "uptime_seconds": round(time.monotonic() - _SERVER_START_TIME, 2),
+            "db": "ok" if db_ok else "error",
+        })
+
+    # ── API: Connectors ───────────────────────────────────────────────
+
+    def _handle_connectors_status(self):
+        statuses = connectors.list_all_statuses()
+        # Never expose token values — strip them from response
+        for s in statuses:
+            s.pop("token", None)
+            s.pop("password", None)
+        self._json_response(200, {"connectors": statuses})
+
+    def _handle_connectors_test(self):
+        body = self._parse_json_body()
+        if body is None:
+            return
+        if not self._validate_body(body):
+            return
+        connector_name = body.get("connector", "")
+        if not connector_name:
+            self._json_response(400, {"error": "Missing 'connector' field."})
+            return
+        result = connectors.test_connector(connector_name)
+        self._json_response(200, result)
+
+    # ── API: Incidents ────────────────────────────────────────────────
+
+    def _handle_incidents_list(self, qs):
+        filters = {}
+        for key in ("status", "severity", "service"):
+            val = self._qs_first(qs, key)
+            if val:
+                filters[key] = val
+        incidents = store.list_incidents(filters)
+        self._json_response(200, {"incidents": incidents, "count": len(incidents)})
+
+    def _handle_incident_get(self, incident_id):
+        incident = store.get_incident(incident_id)
+        if incident is None:
+            self._json_response(404, {"error": f"Incident '{incident_id}' not found."})
+            return
+        self._json_response(200, incident)
+
+    def _handle_incident_timeline(self, incident_id):
+        incident = store.get_incident(incident_id)
+        if incident is None:
+            self._json_response(404, {"error": f"Incident '{incident_id}' not found."})
+            return
+        timeline = store.get_incident_timeline(incident_id)
+        self._json_response(200, {"incident_id": incident_id, "events": timeline, "count": len(timeline)})
+
+    def _handle_incidents_create(self):
+        body = self._parse_json_body()
+        if body is None:
+            return
+        if not self._validate_body(body):
+            return
+        title = body.get("title", "").strip()
+        if not title:
+            self._json_response(400, {"error": "Missing required field: 'title'."})
+            return
+        incident = store.create_incident(
+            title=title,
+            service=body.get("service"),
+            severity=body.get("severity", "medium"),
+            description=body.get("description"),
+            owner=body.get("owner"),
+        )
+        if incident is None:
+            self._json_response(500, {"error": "Failed to create incident."})
+            return
+        store.add_incident_event(incident["id"], "created",
+                                  actor=body.get("owner", "system"),
+                                  message=f"Incident created: {title}")
+        self._json_response(201, incident)
+
+    def _handle_incident_acknowledge(self, incident_id):
+        body = self._parse_json_body()
+        if body is None:
+            body = {}
+        incident = store.get_incident(incident_id)
+        if incident is None:
+            self._json_response(404, {"error": f"Incident '{incident_id}' not found."})
+            return
+        updated = store.update_incident_status(incident_id, "acknowledged")
+        store.add_incident_event(incident_id, "acknowledged",
+                                  actor=body.get("actor", "system"),
+                                  message=body.get("message", "Incident acknowledged."))
+        self._json_response(200, updated)
+
+    def _handle_incident_resolve(self, incident_id):
+        body = self._parse_json_body()
+        if body is None:
+            body = {}
+        incident = store.get_incident(incident_id)
+        if incident is None:
+            self._json_response(404, {"error": f"Incident '{incident_id}' not found."})
+            return
+        extra = {}
+        if body.get("resolution"):
+            extra["description"] = body["resolution"]
+        updated = store.update_incident_status(incident_id, "resolved", extra)
+        store.add_incident_event(incident_id, "resolved",
+                                  actor=body.get("actor", "system"),
+                                  message=body.get("message", "Incident resolved."))
+        self._json_response(200, updated)
+
+    def _handle_incident_reopen(self, incident_id):
+        body = self._parse_json_body()
+        if body is None:
+            body = {}
+        incident = store.get_incident(incident_id)
+        if incident is None:
+            self._json_response(404, {"error": f"Incident '{incident_id}' not found."})
+            return
+        updated = store.update_incident_status(incident_id, "open")
+        store.add_incident_event(incident_id, "reopened",
+                                  actor=body.get("actor", "system"),
+                                  message=body.get("message", "Incident reopened."))
+        self._json_response(200, updated)
+
+    def _handle_incident_link_investigation(self, incident_id):
+        body = self._parse_json_body()
+        if body is None:
+            return
+        if not self._validate_body(body):
+            return
+        investigation_id = body.get("investigation_id", "").strip()
+        if not investigation_id:
+            self._json_response(400, {"error": "Missing 'investigation_id'."})
+            return
+        incident = store.get_incident(incident_id)
+        if incident is None:
+            self._json_response(404, {"error": f"Incident '{incident_id}' not found."})
+            return
+        updated = store.update_incident_status(
+            incident_id, incident["status"],
+            extra={"rca_investigation_id": investigation_id}
+        )
+        store.add_incident_event(incident_id, "investigation_linked",
+                                  actor="system",
+                                  message=f"Linked RCA investigation: {investigation_id}")
+        self._json_response(200, updated)
+
+    # ── API: Alerts ───────────────────────────────────────────────────
+
+    def _handle_alerts_list(self, qs):
+        service = self._qs_first(qs, "service")
+        alerts = store.list_alerts(service=service)
+        self._json_response(200, {"alerts": alerts, "count": len(alerts)})
+
+    def _handle_alerts_create(self):
+        body = self._parse_json_body()
+        if body is None:
+            return
+        if not self._validate_body(body):
+            return
+        name = body.get("name", "").strip()
+        if not name:
+            self._json_response(400, {"error": "Missing required field: 'name'."})
+            return
+        alert = store.create_alert(
+            name=name,
+            service=body.get("service"),
+            condition_metric=body.get("condition_metric"),
+            threshold=body.get("threshold"),
+            operator=body.get("operator", ">"),
+            severity=body.get("severity", "medium"),
+            enabled=body.get("enabled", True),
+        )
+        if alert is None:
+            self._json_response(500, {"error": "Failed to create alert."})
+            return
+        self._json_response(201, alert)
+
+    # ── API: Logs ─────────────────────────────────────────────────────
+
+    def _handle_logs_search(self, qs):
+        global current_logs
+        keyword = self._qs_first(qs, "q", "")
+        severity = self._qs_first(qs, "severity")
+        service = self._qs_first(qs, "service")
+        environment = self._qs_first(qs, "environment")
+        status = self._qs_first(qs, "status")
+        from_ts = self._qs_first(qs, "from") or self._qs_first(qs, "from_ts") or self._qs_first(qs, "start")
+        to_ts = self._qs_first(qs, "to") or self._qs_first(qs, "to_ts") or self._qs_first(qs, "end")
+        try:
+            page = int(self._qs_first(qs, "page", "1"))
+        except ValueError:
+            page = 1
+        try:
+            page_size = int(self._qs_first(qs, "page_size", "50"))
+        except ValueError:
+            page_size = 50
+
+        # Use uploaded logs if available, else fixture logs
+        raw_entries = current_logs
+        source = "uploaded_json"
+        if raw_entries is None:
+            logs_path = PROJECT_ROOT / "fixtures" / "logs.json"
+            if logs_path.exists():
+                with open(logs_path, "r", encoding="utf-8") as f:
+                    raw_entries = json.load(f)
+                source = "json_fixture"
+            else:
+                raw_entries = []
+
+        normalized = normalize_entries(raw_entries, source)
+        entries = normalized["entries"]
+
+        filters = {}
+        if severity:
+            filters["severity"] = severity
+        if service:
+            filters["service"] = service
+        if environment:
+            filters["environment"] = environment
+        if status:
+            filters["status"] = status
+        if from_ts:
+            filters["from"] = from_ts
+        if to_ts:
+            filters["to"] = to_ts
+
+        result = search_entries(entries, keyword=keyword, filters=filters,
+                                page=page, page_size=page_size)
+        self._json_response(200, result)
+
+    def _handle_logs_patterns(self):
+        global current_logs
+        raw_entries = current_logs
+        if raw_entries is None:
+            logs_path = PROJECT_ROOT / "fixtures" / "logs.json"
+            if logs_path.exists():
+                with open(logs_path, "r", encoding="utf-8") as f:
+                    raw_entries = json.load(f)
+            else:
+                raw_entries = []
+
+        analysis = analyze_logs(raw_entries)
+        self._json_response(200, {
+            "grouped_patterns": analysis.get("grouped_patterns", []),
+            "new_patterns": analysis.get("new_patterns", []),
+            "level_counts": analysis.get("level_counts", {}),
+            "total_logs": analysis.get("total_logs", 0),
+            "error_count": analysis.get("error_count", 0),
+        })
+
+    def _handle_logs_download(self):
+        """Download the demo log file as a .log text file."""
+        logs_path = PROJECT_ROOT / "fixtures" / "logs.json"
+        if not logs_path.exists():
+            self._json_response(404, {"error": "Log file not found"})
+            return
+        with open(logs_path, "r", encoding="utf-8") as f:
+            logs = json.load(f)
+
+        lines = []
+        for entry in logs:
+            ts = entry.get("timestamp", "")
+            lvl = entry.get("level", "INFO")
+            svc = entry.get("service", "")
+            msg = entry.get("message", "")
+            lines.append(f"{ts} [{lvl:5s}] {svc}: {msg}")
+
+        body = "\n".join(lines)
+        self._text_response(200, body, "text/plain; charset=utf-8", "auth-service.log")
+
+    # ── API: Metrics ──────────────────────────────────────────────────
+
+    def _load_scenario_fixtures(self, scenario="demo"):
+        if scenario == "db":
+            base_path = PROJECT_ROOT / "fixtures" / "baseline_db.json"
+        else:
+            base_path = PROJECT_ROOT / "fixtures" / "baseline.json"
+        curr_path = PROJECT_ROOT / "fixtures" / "current_run.json"
+        with open(base_path, "r", encoding="utf-8") as f:
+            baseline = json.load(f)
+        with open(curr_path, "r", encoding="utf-8") as f:
+            current = json.load(f)
+        return baseline, current
+
+    def _handle_metrics_summary(self, qs):
+        scenario = self._qs_first(qs, "scenario", "demo")
+        try:
+            baseline, current = self._load_scenario_fixtures(scenario)
+        except FileNotFoundError as e:
+            self._json_response(404, {"error": f"Fixture not found: {e}"})
+            return
+        summary = get_metrics_summary(baseline, current)
+        self._json_response(200, {"summary": summary, "scenario": scenario})
+
+    def _handle_metrics_series(self, qs):
+        metric = self._qs_first(qs, "metric", "latency_p99_ms")
+        scenario = self._qs_first(qs, "scenario", "demo")
+        try:
+            n_points = int(self._qs_first(qs, "n", "60"))
+        except ValueError:
+            n_points = 60
+        try:
+            baseline, current = self._load_scenario_fixtures(scenario)
+        except FileNotFoundError as e:
+            self._json_response(404, {"error": f"Fixture not found: {e}"})
+            return
+        series = generate_time_series(baseline, current, metric, n_points=n_points)
+        if not series:
+            self._json_response(404, {"error": f"Unknown or unavailable metric: '{metric}'"})
+            return
+        self._json_response(200, {"metric": metric, "scenario": scenario, "series": series, "count": len(series)})
+
+    def _handle_metrics_anomalies(self, qs):
+        scenario = self._qs_first(qs, "scenario", "demo")
+        metric = self._qs_first(qs, "metric", "latency_p99_ms")
+        try:
+            threshold = float(self._qs_first(qs, "threshold", "20.0"))
+        except ValueError:
+            threshold = 20.0
+        try:
+            baseline, current = self._load_scenario_fixtures(scenario)
+        except FileNotFoundError as e:
+            self._json_response(404, {"error": f"Fixture not found: {e}"})
+            return
+        series = generate_time_series(baseline, current, metric)
+        from agent.metrics_engine import _get_nested, _resolve_metric_key, _METRIC_DEFS
+        canonical = _resolve_metric_key(metric)
+        defn = _METRIC_DEFS.get(canonical)
+        if not defn:
+            self._json_response(404, {"error": f"Unknown metric: '{metric}'"})
+            return
+        baseline_val = _get_nested(baseline, defn[0])
+        if baseline_val is None:
+            self._json_response(404, {"error": f"Metric '{metric}' not found in baseline fixture."})
+            return
+        intervals = get_anomaly_intervals(series, float(baseline_val), threshold_pct=threshold)
+        self._json_response(200, {
+            "metric": metric, "scenario": scenario,
+            "threshold_pct": threshold, "intervals": intervals,
+            "count": len(intervals),
+        })
+
+    def _handle_metrics_export(self, qs):
+        metric = self._qs_first(qs, "metric", "latency_p99_ms")
+        scenario = self._qs_first(qs, "scenario", "demo")
+        try:
+            baseline, current = self._load_scenario_fixtures(scenario)
+        except FileNotFoundError as e:
+            self._json_response(404, {"error": f"Fixture not found: {e}"})
+            return
+        series = generate_time_series(baseline, current, metric)
+        if not series:
+            self._json_response(404, {"error": f"Unknown or unavailable metric: '{metric}'"})
+            return
+        csv_data = export_metrics_csv(series, metric)
+        filename = f"{metric}_{scenario}.csv"
+        self._text_response(200, csv_data, "text/csv; charset=utf-8", filename)
+
+    # ── API: Memory (legacy) ──────────────────────────────────────────
+
+    def _handle_memory_get(self):
+        cases = agent.memory.list_cases()
+        self._json_response(200, {"cases": cases, "count": len(cases)})
+
+    # ── API: Deployments ──────────────────────────────────────────────
+
+    def _handle_deployments(self):
+        commits_path = PROJECT_ROOT / "fixtures" / "commits.json"
+        if not commits_path.exists():
+            self._json_response(200, {"deployments": [], "count": 0})
+            return
+        with open(commits_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        commits = data.get("commit_metadata", {}).get("commits", [])
+        service = data.get("service", "")
+        self._json_response(200, {
+            "deployments": commits,
+            "count": len(commits),
+            "service": service,
+        })
+
+    # ── API: Cases ────────────────────────────────────────────────────
+
+    def _handle_cases_list(self, qs):
+        filters = {}
+        for key in ("service", "status"):
+            val = self._qs_first(qs, key)
+            if val:
+                filters[key] = val
+        cases = store.list_cases(filters)
+        self._json_response(200, {"cases": cases, "count": len(cases)})
+
+    def _handle_cases_search(self, qs):
+        service = self._qs_first(qs, "service")
+        symptom = self._qs_first(qs, "symptom")
+        cases = store.search_cases_by_symptom(service=service, symptom_keyword=symptom)
+        self._json_response(200, {"cases": cases, "count": len(cases)})
+
+    def _handle_case_confirm(self, case_id):
+        body = self._parse_json_body()
+        if body is None:
+            body = {}
+        if body and not self._validate_body(body):
+            return
+        confirmed_by = body.get("confirmed_by", "system")
+        fix_applied = body.get("fix_applied")
+        case = store.confirm_case(case_id, confirmed_by=confirmed_by, fix_applied=fix_applied)
+        if case is None:
+            self._json_response(404, {"error": f"Case '{case_id}' not found."})
+            return
+        self._json_response(200, case)
+
+    # ── API: Saved Searches ───────────────────────────────────────────
+
+    def _handle_saved_searches_list(self):
+        searches = store.list_saved_searches()
+        self._json_response(200, {"saved_searches": searches, "count": len(searches)})
+
+    def _handle_saved_searches_create(self):
+        body = self._parse_json_body()
+        if body is None:
+            return
+        if not self._validate_body(body):
+            return
+        name = body.get("name", "").strip()
+        if not name:
+            self._json_response(400, {"error": "Missing required field: 'name'."})
+            return
+        saved = store.save_search(
+            name=name,
+            query=body.get("query", ""),
+            filters=body.get("filters", {}),
+        )
+        if saved is None:
+            self._json_response(500, {"error": "Failed to save search."})
+            return
+        self._json_response(201, saved)
+
+    # ── API: Traces ───────────────────────────────────────────────────
+
+    def _handle_traces(self):
+        traces_path = PROJECT_ROOT / "fixtures" / "traces.json"
+        if traces_path.exists():
+            with open(traces_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._json_response(200, data)
+        else:
+            # Stub response
+            self._json_response(200, {
+                "traces": [],
+                "service_map": {"nodes": [], "edges": []},
+                "message": "No trace data available. Connect a Jaeger instance for live traces.",
+            })
+
     # ── API: Investigate ──────────────────────────────────────────────
 
     def _handle_investigate(self):
@@ -184,7 +807,6 @@ class RequestHandler(BaseHTTPRequestHandler):
         scenario = body.get("scenario", body.get("mode", "demo"))
         print(f"[API] Investigation requested: scenario={scenario}", flush=True)
 
-        # Inject custom logs into the agent for this investigation
         if current_logs is not None:
             agent._custom_logs = current_logs
         else:
@@ -201,33 +823,6 @@ class RequestHandler(BaseHTTPRequestHandler):
         result = agent.retest()
         self._json_response(200, result)
 
-    def _handle_memory_get(self):
-        cases = agent.memory.list_cases()
-        self._json_response(200, {"cases": cases, "count": len(cases)})
-
-    # ── API: Download logs ────────────────────────────────────────────
-
-    def _handle_logs_download(self):
-        """Download the demo log file as a .log text file."""
-        logs_path = PROJECT_ROOT / "fixtures" / "logs.json"
-        if not logs_path.exists():
-            self._json_response(404, {"error": "Log file not found"})
-            return
-        with open(logs_path, "r", encoding="utf-8") as f:
-            logs = json.load(f)
-
-        # Format as human-readable log lines
-        lines = []
-        for entry in logs:
-            ts = entry.get("timestamp", "")
-            lvl = entry.get("level", "INFO")
-            svc = entry.get("service", "")
-            msg = entry.get("message", "")
-            lines.append(f"{ts} [{lvl:5s}] {svc}: {msg}")
-
-        body = "\n".join(lines)
-        self._text_response(200, body, "text/plain; charset=utf-8", "auth-service.log")
-
     # ── API: Upload logs ──────────────────────────────────────────────
 
     def _handle_logs_upload(self):
@@ -236,8 +831,6 @@ class RequestHandler(BaseHTTPRequestHandler):
         raw = self._read_body()
         if raw is None:
             return
-
-        content_type = self.headers.get("Content-Type", "")
 
         try:
             text = raw.decode("utf-8")
@@ -248,7 +841,6 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self._json_response(400, {"error": "Unable to decode file. Upload UTF-8 text or JSON."})
                 return
 
-        # Try parsing as JSON array first
         parsed = None
         try:
             parsed = json.loads(text)
@@ -256,23 +848,18 @@ class RequestHandler(BaseHTTPRequestHandler):
             pass
 
         if isinstance(parsed, list) and len(parsed) > 0 and isinstance(parsed[0], dict):
-            # JSON log format
             entries = parsed
         else:
-            # Try parsing as text log lines
             entries = []
             for line in text.strip().split("\n"):
                 line = line.strip()
                 if not line:
                     continue
-                # Common log formats: timestamp level message OR level: message
                 entry = {"message": line}
-                # Try ISO timestamp prefix
                 if len(line) > 20 and line[4] == "-" and line[7] == "-":
                     parts = line.split(" ", 1) if " " in line else (line, "")
                     entry["timestamp"] = parts[0]
                     rest = parts[1] if len(parts) > 1 else ""
-                    # Try extracting level
                     for lvl in ("ERROR", "WARN", "INFO", "DEBUG", "CRITICAL", "TRACE"):
                         if rest.strip().startswith(lvl):
                             rest2 = rest.strip()[len(lvl):].strip()
@@ -299,7 +886,6 @@ class RequestHandler(BaseHTTPRequestHandler):
                     entry["level"] = "INFO"
                 entries.append(entry)
 
-        # Validate
         if not entries:
             self._json_response(400, {"error": "No log entries found in uploaded file."})
             return
@@ -307,7 +893,6 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._json_response(400, {"error": "Too many log entries. Maximum 50,000 allowed."})
             return
 
-        # Analyze
         current_logs = entries
         analysis = analyze_logs(entries)
 
@@ -351,9 +936,13 @@ class RequestHandler(BaseHTTPRequestHandler):
         self._json_response(200, {"scenarios": scenarios})
 
 
+class ReusableHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
+
 def run_server(host=HOST, port=PORT):
-    server = HTTPServer((host, port), RequestHandler)
-    print(f"Perf RCA server running at http://{host}:{port}")
+    server = ReusableHTTPServer((host, port), RequestHandler)
+    print(f"Perf RCA AI Platform server running at http://{host}:{port}")
     print("Press Ctrl+C to stop.")
     try:
         server.serve_forever()

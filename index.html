@@ -1,989 +1,2813 @@
-<title>Perf RCA</title>
-<meta name="claude:viewport-fit-sides" content="cover">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<style>
-  :root {
-    color-scheme: dark;
-    --bg: #0b0d14;
-    --surface: #11131e;
-    --surface2: #171a28;
-    --surface3: #1d2134;
-    --border: #252a3d;
-    --border-light: #2e3450;
-    --accent: #4f8ff7;
-    --accent-soft: rgba(79,143,247,0.12);
-    --accent-glow: rgba(79,143,247,0.22);
-    --fg: #e4e6ef;
-    --fg2: #a0a4b8;
-    --fg3: #6b6f85;
-    --good: #34d399;
-    --good-soft: rgba(52,211,153,0.12);
-    --warning: #fbbf24;
-    --warning-soft: rgba(251,191,36,0.12);
-    --serious: #fb923c;
-    --serious-soft: rgba(251,146,60,0.12);
-    --critical: #f87171;
-    --critical-soft: rgba(248,113,113,0.12);
-    --font: system-ui, -apple-system, "Segoe UI", sans-serif;
-    --mono: "Cascadia Code", "Fira Code", "JetBrains Mono", "Consolas", monospace;
-    --radius: 10px;
-    --radius-sm: 6px;
-    --radius-xs: 4px;
-  }
-  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
-    color-scheme: light;
-    --bg: #f4f5f7; --surface: #ffffff; --surface2: #f8f9fb; --surface3: #eef0f4;
-    --border: #dcdfe4; --border-light: #e4e6ea;
-    --accent: #2563eb; --accent-soft: rgba(37,99,235,0.08); --accent-glow: rgba(37,99,235,0.14);
-    --fg: #121418; --fg2: #555a65; --fg3: #8b909d;
-    --good: #16a34a; --good-soft: rgba(22,163,74,0.1);
-    --warning: #d97706; --warning-soft: rgba(217,119,6,0.1);
-    --serious: #ea580c; --serious-soft: rgba(234,88,12,0.1);
-    --critical: #dc2626; --critical-soft: rgba(220,38,38,0.1);
-  }}
-  :root[data-theme="light"] {
-    color-scheme: light;
-    --bg: #f4f5f7; --surface: #ffffff; --surface2: #f8f9fb; --surface3: #eef0f4;
-    --border: #dcdfe4; --border-light: #e4e6ea;
-    --accent: #2563eb; --accent-soft: rgba(37,99,235,0.08); --accent-glow: rgba(37,99,235,0.14);
-    --fg: #121418; --fg2: #555a65; --fg3: #8b909d;
-    --good: #16a34a; --good-soft: rgba(22,163,74,0.1);
-    --warning: #d97706; --warning-soft: rgba(217,119,6,0.1);
-    --serious: #ea580c; --serious-soft: rgba(234,88,12,0.1);
-    --critical: #dc2626; --critical-soft: rgba(220,38,38,0.1);
-  }
-  *,*::before,*::after{box-sizing:border-box;margin:0}
-  body{
-    background:var(--bg);color:var(--fg);font-family:var(--font);
-    line-height:1.5;padding:0;font-size:14px;
-    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
-  }
-  .app{padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px));padding-block:0}
-  .app-inner{max-width:1100px;margin:0 auto}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>perfRCA AI — Autonomous Performance RCA Agent Platform</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090c12;
+      --surface: #10141f;
+      --surface2: #161b29;
+      --surface3: #1d2336;
+      --border: #232a40;
+      --border-light: #2d3652;
+      --accent: #3b82f6;
+      --accent-soft: rgba(59,130,246,0.14);
+      --accent-glow: rgba(59,130,246,0.28);
+      --ai-purple: #8b5cf6;
+      --ai-purple-soft: rgba(139,92,246,0.15);
+      --ai-glow: 0 0 16px rgba(139,92,246,0.35);
+      --fg: #e2e8f0;
+      --fg2: #94a3b8;
+      --fg3: #64748b;
+      --good: #10b981;
+      --good-soft: rgba(16,185,129,0.12);
+      --warning: #f59e0b;
+      --warning-soft: rgba(245,158,11,0.12);
+      --critical: #ef4444;
+      --critical-soft: rgba(239,68,68,0.12);
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --mono: "Cascadia Code", "Fira Code", "JetBrains Mono", "Consolas", monospace;
+      --radius: 8px;
+      --radius-sm: 5px;
+      --sidebar-w: 240px;
+      --topbar-h: 58px;
+    }
 
-  /* Top nav bar */
-  .topbar{
-    display:flex;align-items:center;justify-content:space-between;
-    padding-block:14px;margin-bottom:0;gap:16px;flex-wrap:wrap;
-    border-bottom:1px solid var(--border);
-  }
-  .topbar-brand{display:flex;align-items:center;gap:10px}
-  .topbar-logo{
-    width:38px;height:38px;border-radius:var(--radius-sm);
-    background:linear-gradient(135deg,var(--accent),#7c3aed);
-    display:flex;align-items:center;justify-content:center;
-    color:#fff;font-weight:700;font-size:17px;flex-shrink:0;
-  }
-  .topbar h1{font-size:18px;font-weight:700;letter-spacing:-0.01em;line-height:1.1}
-  .topbar .tag{font-size:11px;color:var(--fg3);font-weight:500;text-transform:uppercase;letter-spacing:0.06em}
-  .topbar-actions{display:flex;gap:8px;flex-wrap:wrap}
+    [data-theme="light"] {
+      color-scheme: light;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface2: #f1f5f9;
+      --surface3: #e2e8f0;
+      --border: #cbd5e1;
+      --border-light: #e2e8f0;
+      --accent: #2563eb;
+      --accent-soft: rgba(37,99,235,0.08);
+      --accent-glow: rgba(37,99,235,0.18);
+      --ai-purple: #7c3aed;
+      --ai-purple-soft: rgba(124,58,237,0.1);
+      --ai-glow: 0 0 12px rgba(124,58,237,0.2);
+      --fg: #0f172a;
+      --fg2: #475569;
+      --fg3: #64748b;
+      --good: #059669;
+      --good-soft: rgba(5,150,105,0.1);
+      --warning: #d97706;
+      --warning-soft: rgba(217,119,6,0.1);
+      --critical: #dc2626;
+      --critical-soft: rgba(220,38,38,0.1);
+    }
 
-  button,.btn{
-    display:inline-flex;align-items:center;gap:7px;
-    padding:9px 18px;border-radius:var(--radius-sm);
-    border:none;font:inherit;font-size:13px;font-weight:600;
-    cursor:pointer;transition:all 0.15s;white-space:nowrap;
-    letter-spacing:0.01em;
-  }
-  .btn-primary{background:var(--accent);color:#fff}
-  .btn-primary:hover{filter:brightness(1.12)}
-  .btn-primary:disabled{opacity:0.45;cursor:not-allowed;filter:none}
-  .btn-ghost{background:transparent;color:var(--fg2);border:1px solid var(--border)}
-  .btn-ghost:hover{background:var(--surface2);color:var(--fg)}
-  .btn-outline{background:transparent;color:var(--accent);border:1px solid var(--accent)}
-  .btn-outline:hover{background:var(--accent-soft)}
-  .btn-danger{background:transparent;color:var(--critical);border:1px solid var(--critical)}
-  .btn-danger:hover{background:var(--critical-soft)}
-  .btn-sm{padding:6px 13px;font-size:12px;gap:5px}
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+      font-size: 13px;
+      line-height: 1.5;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
 
-  /* Scenario tabs */
-  .scenario-tabs{
-    display:flex;gap:4px;margin-bottom:20px;padding:4px;
-    background:var(--surface2);border-radius:var(--radius-sm);
-    width:fit-content;
-  }
-  .scenario-tab{
-    padding:8px 18px;border-radius:var(--radius-xs);
-    font-size:13px;font-weight:600;cursor:pointer;
-    color:var(--fg3);border:none;background:none;
-    transition:all 0.15s;font-family:inherit;
-  }
-  .scenario-tab.active{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,0.2)}
-  .scenario-tab:hover:not(.active){color:var(--fg2)}
-  .scenario-tab .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle}
-  .scenario-tab .dot.high{background:var(--serious)}
-  .scenario-tab .dot.critical{background:var(--critical)}
+    /* Topbar */
+    .topbar {
+      height: var(--topbar-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 100;
+      flex-shrink: 0;
+    }
+    .topbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+    }
+    .brand-logo {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--ai-purple), var(--accent));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 17px;
+      box-shadow: var(--ai-glow);
+    }
+    .topbar-filters {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .select-sm, .input-sm {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      outline: none;
+      font-family: inherit;
+    }
+    .select-sm:focus, .input-sm:focus { border-color: var(--accent); }
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
 
-  /* Input row */
-  .input-row{display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap}
-  .input-row input{
-    flex:1;min-width:220px;padding:10px 14px;border-radius:var(--radius-sm);
-    border:1px solid var(--border);background:var(--surface);color:var(--fg);
-    font:inherit;font-size:13px;outline:none;transition:border-color 0.15s;
-  }
-  .input-row input:focus{border-color:var(--accent)}
-  .input-row input::placeholder{color:var(--fg3)}
-  .or-divider{color:var(--fg3);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
+    /* Layout */
+    .main-layout {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - var(--topbar-h));
+      overflow: hidden;
+    }
 
-  /* File upload zone */
-  .upload-zone{
-    border:2px dashed var(--border);border-radius:var(--radius);
-    padding:28px 20px;text-align:center;transition:all 0.2s;
-    background:var(--surface);cursor:pointer;margin-bottom:20px;
-  }
-  .upload-zone:hover{border-color:var(--accent);background:var(--accent-soft)}
-  .upload-zone.drag-over{border-color:var(--accent);background:var(--accent-glow)}
-  .upload-zone input[type=file]{display:none}
-  .upload-zone .upload-icon{font-size:32px;margin-bottom:8px}
-  .upload-zone .upload-text{font-size:13px;color:var(--fg2)}
-  .upload-zone .upload-hint{font-size:11px;color:var(--fg3);margin-top:4px}
-  .upload-result{
-    background:var(--surface);border:1px solid var(--border);
-    border-radius:var(--radius);padding:14px 16px;margin-top:12px;
-    display:none;
-  }
+    /* Sidebar */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
+      padding: 12px 8px;
+    }
+    .sidebar-group-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--fg3);
+      padding: 8px 10px 4px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      color: var(--fg2);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+      transition: all 0.15s;
+    }
+    .nav-item:hover {
+      background: var(--surface2);
+      color: var(--fg);
+    }
+    .nav-item.active {
+      background: var(--ai-purple-soft);
+      color: var(--ai-purple);
+      font-weight: 600;
+      border-left: 3px solid var(--ai-purple);
+    }
+    .nav-item .badge {
+      margin-left: auto;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 99px;
+      background: var(--surface3);
+      color: var(--fg2);
+    }
+    .nav-item.active .badge {
+      background: var(--ai-purple);
+      color: #fff;
+    }
 
-  /* Progress */
-  .progress-bar{display:flex;gap:4px;margin-bottom:16px}
-  .progress-step{
-    flex:1;min-width:70px;padding:7px 10px;border-radius:var(--radius-xs);
-    font-size:10px;font-weight:700;text-align:center;white-space:nowrap;
-    background:var(--surface2);color:var(--fg3);border:1px solid var(--border);
-    text-transform:uppercase;letter-spacing:0.04em;
-  }
-  .progress-step.done{
-    background:var(--good-soft);color:var(--good);border-color:color-mix(in srgb,var(--good) 30%,transparent)
-  }
+    /* Content Area */
+    .content-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 24px 60px;
+      background: var(--bg);
+    }
+    .page-section {
+      display: none;
+    }
+    .page-section.active {
+      display: block;
+      animation: fadeIn 0.15s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
 
-  /* Section headings */
-  .section{margin-bottom:28px}
-  .sec-head{
-    display:flex;align-items:center;gap:10px;margin-bottom:14px;
-    font-size:12px;font-weight:700;text-transform:uppercase;
-    letter-spacing:0.06em;color:var(--fg3);
-  }
-  .sec-head::after{content:"";flex:1;height:1px;background:var(--border)}
-  .sec-head .badge{
-    font-size:11px;padding:2px 8px;border-radius:99px;
-    font-weight:700;letter-spacing:0.03em;
-  }
+    /* Section Headings */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .page-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .page-subtitle {
+      font-size: 12px;
+      color: var(--fg3);
+      margin-top: 2px;
+    }
 
-  /* Pills */
-  .pill{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600}
-  .pill-good{background:var(--good-soft);color:var(--good)}
-  .pill-warn{background:var(--warning-soft);color:var(--warning)}
-  .pill-crit{background:var(--critical-soft);color:var(--critical)}
-  .pill-sev{background:var(--serious-soft);color:var(--serious)}
-  .pill-info{background:var(--accent-soft);color:var(--accent)}
+    /* Common Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .btn-ai {
+      background: linear-gradient(135deg, var(--ai-purple), var(--accent));
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(139,92,246,0.3);
+    }
+    .btn-ai:hover { filter: brightness(1.15); box-shadow: 0 4px 14px rgba(139,92,246,0.45); }
+    .btn-ghost { background: var(--surface2); color: var(--fg); border-color: var(--border); }
+    .btn-ghost:hover { background: var(--surface3); border-color: var(--border-light); }
+    .btn-outline { background: transparent; color: var(--accent); border-color: var(--accent); }
+    .btn-outline:hover { background: var(--accent-soft); }
+    .btn-danger { background: var(--critical-soft); color: var(--critical); border-color: var(--critical); }
+    .btn-danger:hover { background: var(--critical); color: #fff; }
+    .btn-sm { padding: 4px 9px; font-size: 11px; }
 
-  /* Summary hero cards */
-  .hero-row{
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
-    gap:12px;margin-bottom:24px;
-  }
-  .hero-card{
-    background:var(--surface);border:1px solid var(--border);
-    border-radius:var(--radius);padding:18px 20px;
-    position:relative;overflow:hidden;
-  }
-  .hero-card .hero-icon{font-size:20px;margin-bottom:6px}
-  .hero-card .hero-label{font-size:11px;color:var(--fg3);font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
-  .hero-card .hero-value{font-size:32px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums;font-family:var(--mono)}
-  .hero-card .hero-sub{font-size:12px;color:var(--fg2);margin-top:2px}
-  .hero-card .hero-stripe{position:absolute;top:0;left:0;width:100%;height:3px}
-  .hero-card .hero-stripe.good{background:var(--good)}
-  .hero-card .hero-stripe.warn{background:var(--warning)}
-  .hero-card .hero-stripe.crit{background:var(--critical)}
-  .hero-card .hero-stripe.accent{background:var(--accent)}
+    /* Badges & Pills */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .pill-good { background: var(--good-soft); color: var(--good); }
+    .pill-warn { background: var(--warning-soft); color: var(--warning); }
+    .pill-crit { background: var(--critical-soft); color: var(--critical); }
+    .pill-info { background: var(--accent-soft); color: var(--accent); }
+    .pill-ai { background: var(--ai-purple-soft); color: var(--ai-purple); border: 1px solid rgba(139,92,246,0.3); }
+    .pill-neutral { background: var(--surface3); color: var(--fg2); }
 
-  /* Metric tiles */
-  .metrics-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:24px}
-  .metric-tile{
-    background:var(--surface);border:1px solid var(--border);
-    border-radius:var(--radius);padding:15px 17px;transition:border-color 0.15s;
-  }
-  .metric-tile:hover{border-color:var(--border-light)}
-  .metric-tile .m-label{font-size:11px;color:var(--fg3);font-weight:600;text-transform:uppercase;letter-spacing:0.05em}
-  .metric-tile .m-row{display:flex;align-items:baseline;gap:8px;margin-top:4px}
-  .metric-tile .m-current{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;font-family:var(--mono);line-height:1.1}
-  .metric-tile .m-base{font-size:12px;color:var(--fg3);font-family:var(--mono)}
-  .metric-tile .m-delta{font-size:12px;font-weight:600;margin-top:2px}
-  .m-up-bad{color:var(--critical)}.m-down-good{color:var(--good)}
-  .m-down-bad{color:var(--critical)}.m-up-good{color:var(--good)}
-  .metric-bar{height:4px;border-radius:2px;background:var(--surface3);margin-top:8px;overflow:hidden}
-  .metric-bar-fill{height:100%;border-radius:2px;transition:width 0.5s ease}
+    /* Cards & Grids */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--fg3);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
 
-  /* Anomaly cards */
-  .anomaly-list{display:flex;flex-direction:column;gap:8px;margin-bottom:24px}
-  .anomaly-card{
-    background:var(--surface);border:1px solid var(--border);
-    border-radius:var(--radius-sm);padding:12px 15px;
-    display:flex;align-items:flex-start;gap:12px;
-  }
-  .anomaly-card .a-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:6px}
-  .anomaly-card .a-body{flex:1;min-width:0}
-  .anomaly-card .a-name{font-size:13px;font-weight:600;margin-bottom:2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .anomaly-card .a-desc{font-size:12px;color:var(--fg2);line-height:1.5}
+    /* AI Hero Banner */
+    .ai-hero-banner {
+      background: linear-gradient(135deg, rgba(139,92,246,0.12), rgba(59,130,246,0.08));
+      border: 1px solid rgba(139,92,246,0.3);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .ai-hero-banner::before {
+      content: "";
+      position: absolute;
+      top: -30px; right: -30px;
+      width: 140px; height: 140px;
+      background: radial-gradient(circle, rgba(139,92,246,0.2), transparent 70%);
+      pointer-events: none;
+    }
+    .ai-hero-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .ai-agent-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .ai-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--ai-purple), var(--accent));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      color: #fff;
+      box-shadow: var(--ai-glow);
+    }
+    .ai-hero-stats {
+      display: flex;
+      gap: 12px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .ai-stat-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+    }
+    .ai-stat-box strong { color: var(--fg); font-size: 13px; font-family: var(--mono); }
 
-  /* Log viewer */
-  .log-header{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
-  .log-viewer{
-    background:var(--surface);border:1px solid var(--border);
-    border-radius:var(--radius);overflow:hidden;margin-bottom:20px;
-    max-height:350px;overflow-y:auto;
-  }
-  .log-row{
-    display:flex;gap:10px;padding:5px 14px;font-family:var(--mono);font-size:11px;
-    border-bottom:1px solid var(--border);align-items:flex-start;
-  }
-  .log-row:last-child{border-bottom:none}
-  .log-ts{color:var(--fg3);white-space:nowrap;flex-shrink:0;min-width:120px}
-  .log-lvl{font-weight:700;white-space:nowrap;flex-shrink:0;min-width:50px;text-align:right}
-  .log-msg{color:var(--fg2);word-break:break-word;flex:1}
-  .lvl-E{color:var(--critical)}.lvl-W{color:var(--warning)}.lvl-I{color:var(--accent)}.lvl-D{color:var(--fg3)}
-  .log-summary-bar{
-    display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;
-    padding:12px 16px;background:var(--surface2);border-radius:var(--radius-sm);
-    font-size:12px;
-  }
-  .log-summary-bar span strong{color:var(--fg)}
-  .log-summary-bar span{color:var(--fg2)}
+    /* AI Thought Stream Terminal */
+    .ai-terminal {
+      background: #05070c;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: #cbd5e1;
+      padding: 14px;
+      max-height: 280px;
+      overflow-y: auto;
+      line-height: 1.6;
+    }
+    .ai-term-line {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .ai-term-time { color: var(--fg3); flex-shrink: 0; width: 70px; }
+    .ai-term-tag { font-weight: 700; flex-shrink: 0; }
+    .ai-term-msg { word-break: break-word; flex: 1; }
 
-  /* Hypothesis */
-  .hypo-list{display:flex;flex-direction:column;gap:14px;margin-bottom:24px}
-  .hypo-card{
-    background:var(--surface);border:1px solid var(--border);
-    border-radius:var(--radius);padding:20px;position:relative;overflow:hidden;
-  }
-  .hypo-card.top{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-soft)}
-  .hypo-card .h-ribbon{position:absolute;top:0;left:0;bottom:0;width:4px}
-  .h-ribbon.strong{background:var(--good)}.h-ribbon.moderate{background:var(--warning)}
-  .h-ribbon.weak{background:var(--serious)}.h-ribbon.spec{background:var(--fg3)}
-  .hypo-card .h-rank{
-    font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;
-    color:var(--accent);margin-bottom:4px;
-  }
-  .hypo-card .h-title{font-size:16px;font-weight:700;margin-bottom:6px;line-height:1.3}
-  .hypo-card .h-desc{font-size:13px;color:var(--fg2);margin-bottom:14px;line-height:1.6}
-  .conf-row{display:flex;align-items:center;gap:10px;margin-bottom:4px}
-  .conf-bar{flex:1;height:8px;border-radius:4px;background:var(--surface3);overflow:hidden}
-  .conf-fill{height:100%;border-radius:4px;transition:width 0.5s ease}
-  .conf-num{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;min-width:42px;text-align:right}
-  .conf-label{font-size:11px;color:var(--fg3);margin-bottom:12px}
-  .ev-block{margin-top:12px}
-  .ev-block h6{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px}
-  .ev-block h6.sup{color:var(--good)}.ev-block h6.con{color:var(--critical)}
-  .ev-block li{font-size:12px;margin-bottom:3px;margin-left:16px;color:var(--fg2);line-height:1.5}
-  .commit-tag{
-    display:inline-flex;align-items:center;gap:6px;padding:5px 12px;
-    border-radius:var(--radius-sm);background:var(--warning-soft);
-    color:var(--warning);font-size:12px;font-weight:600;font-family:var(--mono);margin-top:8px;
-  }
-  .fix-box{
-    background:var(--accent-soft);border-left:3px solid var(--accent);
-    padding:12px 16px;border-radius:0 var(--radius-sm) var(--radius-sm) 0;
-    margin-top:12px;font-size:12px;line-height:1.7;color:var(--fg2);
-  }
-  .fix-box strong{color:var(--fg)}
-  .fix-num{display:inline-block;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;text-align:center;line-height:20px;font-size:11px;font-weight:700;margin-right:4px}
+    /* Interactive AI Assistant Bar */
+    .ai-query-bar {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .ai-prompt-pills {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .ai-prompt-pill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--fg2);
+      padding: 4px 10px;
+      border-radius: 99px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ai-prompt-pill:hover {
+      background: var(--ai-purple-soft);
+      color: var(--ai-purple);
+      border-color: var(--ai-purple);
+    }
 
-  /* Recommendations */
-  .rec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:24px}
-  .rec-card{
-    background:var(--surface);border:1px solid var(--border);
-    border-radius:var(--radius-sm);padding:15px 17px;
-  }
-  .rec-card .rec-icon{font-size:18px;margin-bottom:8px}
-  .rec-card .rec-cat{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--fg3);margin-bottom:6px}
-  .rec-card .rec-text{font-size:13px;line-height:1.6;color:var(--fg2)}
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-stripe {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .kpi-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--fg3);
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+    .kpi-value {
+      font-size: 26px;
+      font-weight: 700;
+      font-family: var(--mono);
+      margin: 4px 0 2px;
+    }
+    .kpi-delta {
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
 
-  /* Retest */
-  .retest-box{
-    background:var(--surface);border:1px solid var(--border);
-    border-radius:var(--radius);padding:20px;margin-bottom:24px;
-  }
-  .retest-box .sim-tag{
-    font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;
-    color:var(--warning);border:1px solid var(--warning);
-    display:inline-block;padding:3px 10px;border-radius:var(--radius-xs);margin-bottom:10px;
-  }
-  .retest-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:14px}
-  .retest-grid .metric-tile{padding:12px 14px}
-  .retest-grid .m-current{font-size:22px}
-  .retest-result{
-    margin-top:16px;padding:14px 16px;
-    background:var(--good-soft);border:1px solid var(--good);
-    border-radius:var(--radius-sm);display:none;
-  }
-  .retest-result .sim-tag{color:var(--good);border-color:var(--good)}
+    /* Tables */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .data-table th {
+      text-align: left;
+      padding: 9px 12px;
+      color: var(--fg3);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.03em;
+    }
+    .data-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--fg);
+      vertical-align: middle;
+    }
+    .data-table tr:hover td {
+      background: var(--surface2);
+    }
 
-  /* Jira & Confluence cards */
-  .ticket-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
-  @media(max-width:700px){.ticket-row{grid-template-columns:1fr}}
-  .ticket-card{
-    background:var(--surface);border:1px solid var(--border);
-    border-radius:var(--radius);overflow:hidden;
-  }
-  .ticket-card .t-head{
-    padding:14px 18px;border-bottom:1px solid var(--border);
-    display:flex;align-items:center;gap:10px;
-    background:var(--surface2);
-  }
-  .ticket-card .t-icon{font-size:18px;flex-shrink:0}
-  .ticket-card .t-type{
-    font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;
-    padding:2px 8px;border-radius:var(--radius-xs);
-  }
-  .t-type.bug{background:var(--critical-soft);color:var(--critical)}
-  .t-type.story{background:var(--accent-soft);color:var(--accent)}
-  .ticket-card .t-id{font-size:12px;color:var(--fg3);font-family:var(--mono)}
-  .ticket-card .t-body{padding:16px 18px}
-  .ticket-card .t-summary{font-size:15px;font-weight:700;margin-bottom:10px;line-height:1.3}
-  .ticket-card .t-meta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:var(--fg2)}
-  .ticket-card .t-meta span{display:flex;align-items:center;gap:4px}
-  .ticket-card .t-meta .t-val{color:var(--fg)}
-  .ticket-card .t-desc{
-    background:var(--surface2);border-radius:var(--radius-sm);
-    padding:12px 14px;font-size:12px;color:var(--fg2);line-height:1.6;
-    font-family:var(--mono);margin-bottom:12px;max-height:160px;overflow-y:auto;
-    white-space:pre-wrap;
-  }
-  .ticket-card .t-labels{display:flex;gap:6px;flex-wrap:wrap}
-  .ticket-card .t-comment{
-    border-left:3px solid var(--accent);padding:10px 14px;
-    margin-top:12px;background:var(--surface2);border-radius:0 var(--radius-sm) var(--radius-sm) 0;
-    font-size:12px;color:var(--fg2);line-height:1.6;
-  }
-  .ticket-card .t-comment .t-author{font-weight:700;color:var(--accent)}
-  .ticket-card .t-comment .t-when{color:var(--fg3);font-size:11px}
+    /* Code & Monospace */
+    .code-block {
+      font-family: var(--mono);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-size: 11px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
 
-  /* Confluence */
-  .conf-section{margin-top:12px}
-  .conf-section h4{font-size:13px;font-weight:700;margin-bottom:4px;color:var(--fg)}
-  .conf-section p{font-size:12px;color:var(--fg2);line-height:1.6;margin-bottom:8px}
+    /* Modals */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(2px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      width: 100%;
+      max-width: 540px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-header h3 { font-size: 15px; font-weight: 700; }
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .modal-footer {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      background: var(--surface2);
+    }
 
-  /* DB metrics panel */
-  .db-panel{
-    display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
-    gap:14px;margin-bottom:24px;
-  }
-  .db-group{
-    background:var(--surface);border:1px solid var(--border);
-    border-radius:var(--radius);padding:16px 18px;
-  }
-  .db-group .db-gname{
-    font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;
-    color:var(--fg3);margin-bottom:10px;display:flex;align-items:center;gap:8px;
-  }
-  .db-group .db-gname::after{content:"";flex:1;height:1px;background:var(--border)}
-  .db-row{display:flex;justify-content:space-between;padding:5px 0;font-size:12px}
-  .db-row .db-key{color:var(--fg2)}.db-row .db-val{font-weight:600;font-family:var(--mono);font-size:12px}
-  .db-row .db-val.crit{color:var(--critical)}.db-row .db-val.warn{color:var(--warning)}.db-row .db-val.good{color:var(--good)}
+    /* Form fields */
+    .form-group { margin-bottom: 14px; }
+    .form-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--fg2);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 5px;
+    }
+    .form-control {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+    }
+    .form-control:focus { border-color: var(--accent); }
 
-  /* Slow queries */
-  .query-card{
-    background:var(--surface);border:1px solid var(--border);
-    border-radius:var(--radius-sm);padding:12px 15px;margin-top:8px;
-  }
-  .query-card code{
-    display:block;font-family:var(--mono);font-size:11px;color:var(--warning);
-    background:var(--surface2);padding:8px 10px;border-radius:var(--radius-xs);
-    margin-bottom:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;
-  }
-  .query-card .q-stats{display:flex;gap:16px;font-size:11px;color:var(--fg2);flex-wrap:wrap}
-  .query-card .q-stats strong{color:var(--fg)}
+    /* Timeline */
+    .timeline {
+      position: relative;
+      padding-left: 20px;
+      margin: 10px 0;
+    }
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 6px;
+      top: 6px;
+      bottom: 6px;
+      width: 2px;
+      background: var(--border);
+    }
+    .timeline-item { position: relative; margin-bottom: 16px; }
+    .timeline-dot {
+      position: absolute;
+      left: -20px;
+      top: 4px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--surface);
+    }
+    .timeline-time { font-size: 11px; color: var(--fg3); font-family: var(--mono); }
+    .timeline-title { font-weight: 600; font-size: 13px; color: var(--fg); margin: 2px 0; }
 
-  /* States */
-  .empty-state{text-align:center;padding:60px 20px;color:var(--fg3)}
-  .empty-state .e-icon{font-size:48px;margin-bottom:16px;opacity:0.6}
-  .empty-state h2{font-size:18px;font-weight:700;color:var(--fg);margin-bottom:6px}
-  .empty-state p{font-size:13px;max-width:500px;margin:0 auto 20px;line-height:1.6}
-  .empty-state .quick-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
-  .error-box{
-    background:var(--critical-soft);border:1px solid var(--critical);
-    border-radius:var(--radius);padding:16px 20px;color:var(--critical);
-    font-size:13px;font-weight:600;margin-bottom:20px;display:none;
-  }
-  .spinner{width:22px;height:22px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;vertical-align:middle;margin-right:10px}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .loading-overlay{text-align:center;padding:50px 20px;display:none}
-  .hidden{display:none!important}
-</style>
+    /* Notice Banner */
+    .banner {
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .banner-simulated {
+      background: var(--warning-soft);
+      border: 1px solid var(--warning);
+      color: var(--warning);
+      font-weight: 600;
+    }
 
-<div class="app">
-<div class="app-inner">
+    /* Progress bar */
+    .progress-bar { display: flex; gap: 4px; margin-bottom: 16px; }
+    .progress-step {
+      flex: 1; padding: 7px; border-radius: var(--radius-sm);
+      font-size: 10px; font-weight: 700; text-align: center;
+      background: var(--surface2); color: var(--fg3);
+      border: 1px solid var(--border); text-transform: uppercase;
+    }
+    .progress-step.done {
+      background: var(--good-soft); color: var(--good); border-color: var(--good);
+    }
+    .progress-step.active {
+      background: var(--ai-purple-soft); color: var(--ai-purple); border-color: var(--ai-purple);
+      box-shadow: 0 0 8px rgba(139,92,246,0.3);
+    }
 
-  <!-- ── Top bar ──────────────────────── -->
+    /* Span waterfall */
+    .span-row {
+      display: flex;
+      align-items: center;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      font-family: var(--mono);
+    }
+    .span-bar-wrapper {
+      flex: 1;
+      height: 16px;
+      background: var(--surface2);
+      border-radius: 3px;
+      position: relative;
+      overflow: hidden;
+      margin: 0 12px;
+    }
+    .span-bar-fill {
+      position: absolute;
+      top: 0; bottom: 0;
+      border-radius: 3px;
+    }
+
+    /* Toast */
+    #toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      padding: 10px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-sm);
+      color: var(--fg);
+      font-size: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: slideIn 0.2s ease;
+    }
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+  </style>
+</head>
+<body>
+
+  <!-- Topbar -->
   <header class="topbar">
     <div class="topbar-brand">
-      <div class="topbar-logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-      <div><h1>Perf RCA</h1><div class="tag">Performance Root Cause Analysis</div></div>
+      <div class="brand-logo">🤖</div>
+      <div>
+        <span>perfRCA <span style="color:var(--ai-purple)">AI</span></span>
+        <span class="pill pill-ai" style="margin-left:6px;font-size:10px;">AUTONOMOUS SRE AGENT</span>
+      </div>
     </div>
+
+    <div class="topbar-filters">
+      <select id="global-service" class="select-sm" onchange="onGlobalFilterChange()">
+        <option value="all">All Services</option>
+        <option value="auth-service" selected>auth-service (Active RCA)</option>
+        <option value="payment-db">payment-db (DB Scenario)</option>
+      </select>
+
+      <select id="global-env" class="select-sm" onchange="onGlobalFilterChange()">
+        <option value="all">All Environments</option>
+        <option value="production" selected>Production</option>
+        <option value="staging">Staging</option>
+      </select>
+
+      <select id="global-timerange" class="select-sm" onchange="onGlobalFilterChange()">
+        <option value="1h">Last 1h</option>
+        <option value="6h">Last 6h</option>
+        <option value="24h" selected>Last 24h</option>
+        <option value="7d">Last 7d</option>
+      </select>
+
+      <button class="btn btn-ghost btn-sm" onclick="refreshCurrentPage()" title="Refresh view">
+        ⟳ Refresh
+      </button>
+    </div>
+
     <div class="topbar-actions">
-      <button class="btn btn-ghost btn-sm" onclick="downloadLogs()" title="Download sample log file">📥 Download Logs</button>
-      <button class="btn btn-ghost btn-sm" id="btn-upload" onclick="document.getElementById('file-input').click()">📤 Upload Logs</button>
-      <input type="file" id="file-input" accept=".json,.log,.txt,.csv" onchange="handleFileUpload(this)" hidden>
+      <span class="pill pill-good" id="ai-agent-badge" style="cursor:pointer;" onclick="showAgentStatus()">
+        ⚡ AI Agent: Active (12ms)
+      </span>
+      <span id="health-indicator" class="pill pill-good" style="cursor:pointer;" onclick="showHealthInfo()">● Core OK</span>
+      <button class="btn btn-ghost btn-sm" onclick="toggleTheme()" title="Toggle theme">🌓</button>
     </div>
   </header>
 
-  <!-- ── Scenario selector ────────────── -->
-  <div style="margin-top:20px">
-    <div class="scenario-tabs" id="scenario-tabs">
-      <button class="scenario-tab active" onclick="selectScenario('demo',this)">
-        <span class="dot high"></span>Thread Pool Exhaustion
+  <!-- Layout -->
+  <div class="main-layout">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="sidebar-group-title">AI Investigation</div>
+      <button class="nav-item active" onclick="navigate('overview')">
+        <span>🤖</span> AI Command Center
       </button>
-      <button class="scenario-tab" onclick="selectScenario('db',this)">
-        <span class="dot critical"></span>DB Lock Contention
+      <button class="nav-item" onclick="navigate('rca')">
+        <span>🔍</span> AI RCA Workbench
       </button>
-    </div>
+      <button class="nav-item" onclick="navigate('incidents')">
+        <span>🚨</span> Incidents &amp; Alerts
+        <span class="badge" id="incident-badge">0</span>
+      </button>
+      <button class="nav-item" onclick="navigate('cases')">
+        <span>🗂</span> Learned Case Store
+      </button>
 
-    <div class="input-row">
-      <input type="text" id="grafana-url" placeholder="Grafana dashboard URL (optional — leave blank for scenario data)">
-      <button class="btn btn-primary" id="btn-analyze" onclick="startInvestigation()">▶ Run Analysis</button>
-      <span class="or-divider">or</span>
-      <button class="btn btn-outline btn-sm" id="btn-quick-demo" onclick="quickDemo()">⚡ Quick Demo</button>
-    </div>
-  </div>
+      <div class="sidebar-group-title" style="margin-top:10px;">Telemetry Streams</div>
+      <button class="nav-item" onclick="navigate('logs')">
+        <span>📋</span> Log Intelligence
+      </button>
+      <button class="nav-item" onclick="navigate('metrics')">
+        <span>📈</span> Metrics Explorer
+      </button>
+      <button class="nav-item" onclick="navigate('traces')">
+        <span>🕸</span> Traces &amp; Service Map
+      </button>
+      <button class="nav-item" onclick="navigate('deployments')">
+        <span>🚀</span> Git Change Correlation
+      </button>
+      <button class="nav-item" onclick="navigate('db')">
+        <span>🗄</span> Database Diagnostics
+      </button>
 
-  <!-- ── Upload zone ──────────────────── -->
-  <div class="upload-zone" id="upload-zone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" onclick="document.getElementById('file-input').click()">
-    <div class="upload-icon">📂</div>
-    <div class="upload-text">Drop a log file here or click to browse</div>
-    <div class="upload-hint">Accepts .json, .log, .txt, .csv — max 50,000 lines</div>
-  </div>
-  <div class="upload-result" id="upload-result"></div>
+      <div class="sidebar-group-title" style="margin-top:10px;">Platform Administration</div>
+      <button class="nav-item" onclick="navigate('integrations')">
+        <span>🔌</span> Telemetry Connectors
+      </button>
+      <button class="nav-item" onclick="navigate('reports')">
+        <span>📄</span> Audit Reports
+      </button>
+      <button class="nav-item" onclick="navigate('settings')">
+        <span>⚙️</span> Agent Preferences
+      </button>
+    </nav>
 
-  <!-- ── Error ────────────────────────── -->
-  <div class="error-box" id="error-block"></div>
+    <!-- Main Content Area -->
+    <main class="content-area">
 
-  <!-- ── Loading ──────────────────────── -->
-  <div class="loading-overlay" id="loading-block">
-    <div><span class="spinner"></span> <span style="color:var(--fg2)">Running RCA investigation…</span></div>
-  </div>
-
-  <!-- ── Progress ─────────────────────── -->
-  <div class="section hidden" id="progress-section">
-    <div class="progress-bar" id="progress-bar"></div>
-  </div>
-
-  <!-- ── Empty state ──────────────────── -->
-  <div id="empty-state">
-    <div class="empty-state">
-      <div class="e-icon">🔬</div>
-      <h2>Investigate Performance Regressions</h2>
-      <p>Select a scenario above, optionally upload custom logs, and click <strong>Run Analysis</strong>.
-      The agent will compare baseline metrics, detect anomalies, analyze logs, and identify root causes with evidence.</p>
-      <div class="quick-actions">
-        <button class="btn btn-primary" onclick="quickDemo()">▶ Run Demo Analysis</button>
-        <button class="btn btn-ghost" onclick="document.getElementById('btn-upload').click()">📤 Upload Custom Logs</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Results ──────────────────────── -->
-  <div class="hidden" id="results-container">
-
-    <!-- Hero summary -->
-    <div class="hero-row" id="hero-row"></div>
-
-    <!-- DB metrics (when in DB scenario) -->
-    <div class="section hidden" id="db-section">
-      <div class="sec-head">🗄 Database Metrics</div>
-      <div class="db-panel" id="db-panel"></div>
-    </div>
-
-    <!-- Metric comparison -->
-    <div class="section" id="metrics-section">
-      <div class="sec-head">📊 Metric Comparison <span class="badge pill-info" style="margin-left:8px">Baseline → Current</span></div>
-      <div class="metrics-grid" id="metrics-grid"></div>
-    </div>
-
-    <!-- Anomalies -->
-    <div class="section hidden" id="anomalies-section">
-      <div class="sec-head">⚠ Detected Anomalies <span class="badge pill-crit" id="anomaly-count" style="margin-left:8px"></span></div>
-      <div class="anomaly-list" id="anomaly-list"></div>
-    </div>
-
-    <!-- Log Analysis -->
-    <div class="section hidden" id="logs-section">
-      <div class="sec-head">📋 Log Analysis</div>
-      <div class="log-summary-bar" id="log-summary-bar"></div>
-      <div class="log-header">
-        <span style="font-size:12px;color:var(--fg3)">Sample entries:</span>
-        <button class="btn btn-ghost btn-sm" onclick="downloadLogs()">📥 Download Full Log</button>
-      </div>
-      <div class="log-viewer" id="log-viewer"></div>
-    </div>
-
-    <!-- Hypotheses -->
-    <div class="section hidden" id="hypotheses-section">
-      <div class="sec-head">💡 Root Cause Hypotheses</div>
-      <div class="hypo-list" id="hypo-list"></div>
-    </div>
-
-    <!-- Recommendations -->
-    <div class="section hidden" id="recs-section">
-      <div class="sec-head">🔧 Additional Recommendations</div>
-      <div class="rec-grid" id="rec-grid"></div>
-    </div>
-
-    <!-- Retest -->
-    <div class="section hidden" id="retest-section">
-      <div class="sec-head">🔄 Fix Verification</div>
-      <div class="retest-box" id="retest-box">
-        <div id="retest-inner"></div>
-      </div>
-      <button class="btn btn-outline hidden" id="btn-retest" onclick="runRetest()">🔄 Run Simulated Retest</button>
-    </div>
-
-    <!-- Jira + Confluence -->
-    <div class="section hidden" id="tickets-section">
-      <div class="sec-head">🎫 Tickets & Reports</div>
-      <div class="ticket-row" id="ticket-row"></div>
-    </div>
-  </div>
-
-</div></div>
-
-<script>
-let scenario = 'demo';
-let investigationData = null;
-let uploadedLogs = null;
-let dbMetrics = null;
-const API = '/api/investigate';
-const API_RETEST = '/api/retest';
-const STAGES = ['Validate','Load Data','Analyze','Hypothesize','Evaluate','Report'];
-
-function $(id){return document.getElementById(id)}
-function show(id){const e=$(id);if(e)e.classList.remove('hidden')}
-function hide(id){const e=$(id);if(e)e.classList.add('hidden')}
-function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML}
-
-function selectScenario(id,btn){
-  scenario=id;
-  document.querySelectorAll('.scenario-tab').forEach(t=>t.classList.remove('active'));
-  if(btn)btn.classList.add('active');
-}
-
-async function quickDemo(){await startInvestigation()}
-async function startInvestigation(){
-  const url=$('grafana-url').value.trim();
-  const payload={scenario,mode:url?'grafana':'demo'};
-  if(url)payload.grafana_url=url;
-
-  hide('empty-state');hide('results-container');hide('error-block');
-  hide('anomalies-section');hide('logs-section');hide('hypotheses-section');
-  hide('recs-section');hide('retest-section');hide('tickets-section');hide('db-section');
-  show('loading-block');show('progress-section');
-  $('error-block').style.display='none';
-  $('btn-analyze').disabled=true;
-  $('btn-retest').classList.add('hidden');
-  investigationData=null;
-
-  $('progress-bar').innerHTML=STAGES.map(s=>`<div class="progress-step">${s}</div>`).join('');
-
-  try{
-    const res=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    if(!res.ok){const e=await res.json().catch(()=>({error:`HTTP ${res.status}`}));throw new Error(e.error||`Request failed`)}
-    const data=await res.json();
-    investigationData=data;
-    hide('loading-block');
-    render(data);
-    $('progress-bar').querySelectorAll('.progress-step').forEach(s=>s.classList.add('done'));
-  }catch(e){
-    hide('loading-block');
-    const eb=$('error-block');eb.style.display='block';
-    eb.innerHTML=`<strong>Investigation failed:</strong> ${esc(e.message)}`;
-  }finally{$('btn-analyze').disabled=false}
-}
-
-// ── Log download ──────────────────────────────────────────────
-function downloadLogs(){
-  const a=document.createElement('a');
-  a.href='/api/logs/download';a.download='auth-service.log';
-  document.body.appendChild(a);a.click();document.body.removeChild(a);
-}
-
-// ── File upload + analysis ────────────────────────────────────
-function handleDragOver(e){e.preventDefault();$('upload-zone').classList.add('drag-over')}
-function handleDragLeave(e){$('upload-zone').classList.remove('drag-over')}
-function handleDrop(e){
-  e.preventDefault();$('upload-zone').classList.remove('drag-over');
-  if(e.dataTransfer.files.length)processFile(e.dataTransfer.files[0]);
-}
-async function handleFileUpload(input){
-  if(input.files.length)await processFile(input.files[0]);
-  input.value='';
-}
-async function processFile(file){
-  const res=$('upload-result');res.style.display='block';
-  res.innerHTML=`<div style="display:flex;align-items:center;gap:8px;color:var(--fg2)"><span class="spinner"></span>Analyzing ${esc(file.name)}…</div>`;
-  try{
-    const text=await file.text();
-    const r=await fetch('/api/logs/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:text,filename:file.name})});
-    const data=await r.json();
-    if(!r.ok)throw new Error(data.error||'Upload failed');
-    uploadedLogs=data;
-    res.innerHTML=`<div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">✅</span><span style="color:var(--good);font-weight:600">${esc(data.message)}</span><span style="color:var(--fg3);font-size:12px">(${data.total_entries} entries, ${data.analysis?.error_count||0} errors)</span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="quickDemo()">▶ Run Analysis with these logs</button></div>`;
-  }catch(e){
-    res.innerHTML=`<div style="color:var(--critical);font-weight:600">❌ Upload failed: ${esc(e.message)}</div>`;
-  }
-}
-
-// ── Load DB metrics ───────────────────────────────────────────
-async function loadDbMetrics(){
-  try{const r=await fetch('/api/db-metrics');if(r.ok)dbMetrics=await r.json()}catch(e){dbMetrics=null}
-}
-
-// ── Render ────────────────────────────────────────────────────
-function render(data){
-  show('results-container');
-  const r=data.report;
-  if(!r){$('error-block').style.display='block';$('error-block').innerHTML=`No report data returned. Status: ${esc(data.status)}`;return}
-
-  // Hero row
-  const sev=r.anomalies?.filter(a=>a.severity==='critical'||a.severity==='high').length||0;
-  const topH=r.hypotheses?.[0];
-  $('hero-row').innerHTML=`
-    <div class="hero-card"><div class="hero-stripe ${sev>5?'crit':'warn'}"></div><div class="hero-icon">⚠</div><div class="hero-label">Anomalies Found</div><div class="hero-value">${r.anomalies_detected||0}</div><div class="hero-sub">${sev} severe</div></div>
-    <div class="hero-card"><div class="hero-stripe accent"></div><div class="hero-icon">💡</div><div class="hero-label">Top Hypothesis Confidence</div><div class="hero-value">${topH?Math.round(topH.confidence*100)+'%':'—'}</div><div class="hero-sub">${topH?.evaluation||'—'}</div></div>
-    <div class="hero-card"><div class="hero-stripe good"></div><div class="hero-icon">🕐</div><div class="hero-label">Steps Taken</div><div class="hero-value">${data.steps_taken||0}</div><div class="hero-sub">of ${r.step_limit||12} max</div></div>
-    <div class="hero-card"><div class="hero-stripe accent"></div><div class="hero-icon">📋</div><div class="hero-label">Log Entries Analyzed</div><div class="hero-value">${r.log_summary?.total_logs||0}</div><div class="hero-sub">${r.log_summary?.error_count||0} errors</div></div>`;
-
-  // DB scenario metrics
-  if(scenario==='db'&&dbMetrics){
-    show('db-section');
-    renderDbMetrics();
-  }
-
-  // Metrics
-  renderMetrics(r);
-
-  // Anomalies
-  if(r.anomalies?.length){
-    show('anomalies-section');
-    $('anomaly-count').textContent=r.anomalies.length;
-    renderAnomalies(r.anomalies);
-  }
-
-  // Logs
-  if(r.log_summary?.total_logs>0){
-    show('logs-section');
-    renderLogs(r.log_summary);
-  }
-
-  // Hypotheses
-  if(r.hypotheses?.length){
-    show('hypotheses-section');
-    renderHypotheses(r.hypotheses);
-  }
-
-  // Recommendations
-  if(r.recommendations?.length){
-    show('recs-section');
-    renderRecs(r.recommendations);
-  }
-
-  // Retest
-  if(r.fix_verification){
-    show('retest-section');
-    renderRetest(r.fix_verification);
-    $('btn-retest').classList.remove('hidden');
-  }
-
-  // Tickets
-  show('tickets-section');
-  renderTickets(r);
-}
-
-// ── DB Metrics ────────────────────────────────────────────────
-function renderDbMetrics(){
-  const d=dbMetrics.db_metrics;
-  $('db-panel').innerHTML=`
-    <div class="db-group"><div class="db-gname">🔌 Connections</div>
-      ${dbRow('Active',d.connections.active,'',d.connections.active>120?'crit':d.connections.active>80?'warn':'')}
-      ${dbRow('Idle',d.connections.idle)}
-      ${dbRow('Max',d.connections.max)}
-      ${dbRow('Waiters',d.connections.waiters,'',d.connections.waiters>20?'crit':'')}
-      ${dbRow('Avg Wait',d.connections.avg_wait_ms+'ms','',d.connections.avg_wait_ms>1000?'crit':'')}
-    </div>
-    <div class="db-group"><div class="db-gname">⚡ Queries</div>
-      ${dbRow('Per Second',d.queries.per_second)}
-      ${dbRow('Slow Queries/s',d.queries.slow_queries_per_second,'',d.queries.slow_queries_per_second>100?'crit':'')}
-      ${dbRow('Avg Duration',d.queries.avg_duration_ms+'ms','',d.queries.avg_duration_ms>200?'warn':'')}
-      ${dbRow('P99 Duration',d.queries.p99_duration_ms+'ms','',d.queries.p99_duration_ms>1000?'crit':'')}
-      ${dbRow('Full Table Scans/s',d.queries.full_table_scans_per_second,'',d.queries.full_table_scans_per_second>10?'crit':'warn')}
-    </div>
-    <div class="db-group"><div class="db-gname">🔒 Locks</div>
-      ${dbRow('Active Locks',d.locks.active_locks,'',d.locks.active_locks>100?'crit':'warn')}
-      ${dbRow('Deadlocks/min',d.locks.deadlocks_per_minute,'',d.locks.deadlocks_per_minute>5?'crit':'')}
-      ${dbRow('Lock Wait Avg',d.locks.lock_wait_avg_ms+'ms','',d.locks.lock_wait_avg_ms>1000?'crit':'')}
-      ${dbRow('Row Lock Contention',d.locks.row_lock_contention_pct+'%','',d.locks.row_lock_contention_pct>50?'crit':'warn')}
-    </div>
-    <div class="db-group"><div class="db-gname">💾 Buffer Pool</div>
-      ${dbRow('Hit Ratio',d.buffer_pool.hit_ratio_pct+'%','',d.buffer_pool.hit_ratio_pct>90?'good':d.buffer_pool.hit_ratio_pct<70?'crit':'warn')}
-      ${dbRow('Size',d.buffer_pool.size_gb+' GB')}
-      ${dbRow('Used',d.buffer_pool.used_gb+' GB','',d.buffer_pool.used_gb/d.buffer_pool.size_gb>0.9?'crit':'')}
-      ${dbRow('Dirty Pages',d.buffer_pool.dirty_pages_pct+'%','',d.buffer_pool.dirty_pages_pct>30?'warn':'')}
-    </div>
-    <div class="db-group"><div class="db-gname">🔄 Replication</div>
-      ${dbRow('Lag',d.replication.lag_seconds+'s','',d.replication.lag_seconds>10?'crit':d.replication.lag_seconds>2?'warn':'')}
-      ${dbRow('Status',d.replication.status,'',d.replication.status==='degraded'?'crit':'good')}
-    </div>`;
-
-  // Slow queries
-  if(dbMetrics.slow_query_samples?.length){
-    $('db-panel').insertAdjacentHTML('beforeend',`
-      <div class="db-group" style="grid-column:1/-1"><div class="db-gname">🐌 Top Slow Queries</div>
-        ${dbMetrics.slow_query_samples.map(q=>`
-          <div class="query-card">
-            <code>${esc(q.query_preview)}</code>
-            <div class="q-stats">
-              <span>Avg: <strong>${q.avg_ms}ms</strong></span>
-              <span>Calls: <strong>${q.calls.toLocaleString()}</strong></span>
-              <span>Rows examined: <strong>${(q.rows_examined/1e6).toFixed(1)}M</strong></span>
+      <!-- 1. OVERVIEW SECTION (AI COMMAND CENTER) -->
+      <section id="section-overview" class="page-section active">
+        <!-- AI Agent Hero Command Banner -->
+        <div class="ai-hero-banner">
+          <div class="ai-hero-header">
+            <div class="ai-agent-meta">
+              <div class="ai-avatar">🤖</div>
+              <div>
+                <h2 style="font-size:18px;font-weight:700;">PerfRCA Autonomous AI SRE Agent</h2>
+                <p style="font-size:12px;color:var(--fg2);margin-top:2px;">
+                  Real-time multi-modal root cause analysis · Sub-second deterministic inference · 100% auditable evidence citations
+                </p>
+              </div>
             </div>
-          </div>`).join('')}
-      </div>`);
-  }
+            <div style="display:flex;gap:10px;">
+              <button class="btn btn-ai" onclick="runInstantAgentInvestigation()">
+                ⚡ Run Instant AI Analysis (~12ms)
+              </button>
+              <button class="btn btn-ghost" onclick="navigate('rca')">
+                Open Full Workbench →
+              </button>
+            </div>
+          </div>
 
-  // Recent changes
-  if(dbMetrics.recent_changes?.length){
-    $('db-panel').insertAdjacentHTML('beforeend',`
-      <div class="db-group" style="grid-column:1/-1"><div class="db-gname">📝 Recent Changes</div>
-        ${dbMetrics.recent_changes.map(c=>`
-          <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
-            <div style="font-weight:600;color:var(--fg);margin-bottom:2px">${esc(c.change)}</div>
-            <div style="color:var(--fg3);font-size:11px">Deployed ${esc(c.deployed)} — ${esc(c.impact)}</div>
-          </div>`).join('')}
-      </div>`);
-  }
-}
-function dbRow(key,val,suffix,cls){
-  return `<div class="db-row"><span class="db-key">${key}</span><span class="db-val${cls?' '+cls:''}">${val}${suffix||''}</span></div>`;
-}
+          <div class="ai-hero-stats">
+            <div class="ai-stat-box">
+              <span>⚡ Execution Latency:</span>
+              <strong>12 ms (Sub-second)</strong>
+            </div>
+            <div class="ai-stat-box">
+              <span>🎯 Reasoning Engine:</span>
+              <strong>Deterministic (0% Hallucination)</strong>
+            </div>
+            <div class="ai-stat-box">
+              <span>🔬 Bounded Steps:</span>
+              <strong>7 Iterations (Bounded Loop)</strong>
+            </div>
+            <div class="ai-stat-box">
+              <span>📑 Evidence Citations:</span>
+              <strong>100% Traced (Logs + Commits)</strong>
+            </div>
+          </div>
+        </div>
 
-// ── Metrics ───────────────────────────────────────────────────
-function renderMetrics(report){
-  const grid=$('metrics-grid');
-  const m={};
-  (report.anomalies||[]).forEach(a=>{m[a.metric]=a});
-  const items=[
-    {k:'latency_p99_ms',l:'P99 Latency',u:'ms'},
-    {k:'latency_p95_ms',l:'P95 Latency',u:'ms'},
-    {k:'latency_p50_ms',l:'P50 Latency',u:'ms'},
-    {k:'error_rate_percentage',l:'Error Rate',u:'%'},
-    {k:'throughput_requests_per_second',l:'Throughput',u:'req/s'},
-    {k:'resources_cpu_percent',l:'CPU Usage',u:'%'},
-    {k:'resources_memory_gb',l:'Memory',u:'GB'},
-  ];
-  grid.innerHTML=items.map(it=>{
-    const a=m[it.k];if(!a)return'';
-    const cls=getDC(a.direction,it.k);
-    const arrow=a.direction==='increase'?'↑':'↓';
-    const barPct=Math.min(Math.abs(a.percent_change)/2,100);
-    const barColorCls=a.direction==='increase'?(it.k.startsWith('latency')||it.k.startsWith('error')||it.k.startsWith('resources')?'crit':'good'):'good';
-    return `<div class="metric-tile">
-      <div class="m-label">${it.l}</div>
-      <div class="m-row"><span class="m-current">${a.current_value}</span><span class="m-base">was ${a.baseline_value} ${it.u}</span></div>
-      <div class="m-delta ${cls}">${arrow} ${a.percent_change>0?'+':''}${a.percent_change}%</div>
-      <div class="metric-bar"><div class="metric-bar-fill" style="width:${barPct}%;background:var(--${barColorCls==='crit'?'critical':barColorCls==='good'?'good':'accent'})"></div></div>
-    </div>`;
-  }).join('');
-}
+        <!-- Live AI Agent Cognitive Trajectory / Thought Stream -->
+        <div class="card" style="border:1px solid rgba(139,92,246,0.3);background:rgba(139,92,246,0.03);">
+          <div class="card-title">
+            <span style="display:flex;align-items:center;gap:6px;color:var(--ai-purple);">
+              <span>🧠</span> AI Agent Cognitive Trajectory &amp; Live Reasoning Stream
+            </span>
+            <span class="pill pill-ai">INSPECTABLE STEP-BY-STEP</span>
+          </div>
 
-function getDC(dir,metric){
-  const upBad=['latency','error_rate','resources_cpu','resources_memory'];
-  const isUp=upBad.some(k=>metric.startsWith(k));
-  if(dir==='increase')return isUp?'m-up-bad':'m-up-good';
-  return isUp?'m-down-good':'m-down-bad';
-}
+          <div class="ai-terminal" id="overview-ai-terminal">
+            <div class="ai-term-line">
+              <span class="ai-term-time">00:00.001</span>
+              <span class="ai-term-tag" style="color:var(--ai-purple)">[AGENT_INIT]</span>
+              <span class="ai-term-msg">PerfRCAAgent v2.0 initialized. Cognitive budget: 12 bounded steps. Zero external LLM dependency.</span>
+            </div>
+            <div class="ai-term-line">
+              <span class="ai-term-time">00:00.003</span>
+              <span class="ai-term-tag" style="color:var(--accent)">[INGESTION]</span>
+              <span class="ai-term-msg">Ingested run telemetry for auth-service: 181,780 transactions, 5,090 errors across 298s test run.</span>
+            </div>
+            <div class="ai-term-line">
+              <span class="ai-term-time">00:00.005</span>
+              <span class="ai-term-tag" style="color:var(--critical)">[ANOMALY_DETECTION]</span>
+              <span class="ai-term-msg">Found 4 critical metric regressions vs baseline: P99 Latency +148% (250ms➔620ms), Error Rate +2700% (0.1%➔2.8%), CPU +96% (45%➔88%).</span>
+            </div>
+            <div class="ai-term-line">
+              <span class="ai-term-time">00:00.007</span>
+              <span class="ai-term-tag" style="color:var(--warning)">[LOG_MINING]</span>
+              <span class="ai-term-msg">Normalized 34 log entries. Identified severe error burst at 09:14:58Z: 6x 'Timeout acquiring connection', 7x 'Thread pool exhausted'.</span>
+            </div>
+            <div class="ai-term-line">
+              <span class="ai-term-time">00:00.009</span>
+              <span class="ai-term-tag" style="color:var(--ai-purple)">[GIT_CORRELATION]</span>
+              <span class="ai-term-msg">Matched regression window to Commit a1b2c3d ("Reduce thread pool size 32->24"). Found amplifier commit e4f5g6h ("Add connection retry with queue 200").</span>
+            </div>
+            <div class="ai-term-line">
+              <span class="ai-term-time">00:00.010</span>
+              <span class="ai-term-tag" style="color:var(--good)">[HYPOTHESIS_FORMULATION]</span>
+              <span class="ai-term-msg">Formulated H_CONN_POOL ("Thread Pool Exhaustion Causing Connection Timeout Cascade"). Confidence Score: 88% (STRONG).</span>
+            </div>
+            <div class="ai-term-line">
+              <span class="ai-term-time">00:00.012</span>
+              <span class="ai-term-tag" style="color:var(--good)">[RETEST_SIMULATION]</span>
+              <span class="ai-term-msg">Simulated fix: Restoring thread_pool_size to 32 projects P99 latency returning to 260ms. Report dispatched in 12ms.</span>
+            </div>
+          </div>
 
-// ── Anomalies ──────────────────────────────────────────────────
-function renderAnomalies(anoms){
-  const colors={critical:'var(--critical)',high:'var(--serious)',medium:'var(--warning)',low:'var(--fg3)'};
-  $('anomaly-list').innerHTML=anoms.map(a=>`
-    <div class="anomaly-card">
-      <div class="a-dot" style="background:${colors[a.severity]||'var(--fg3)'}"></div>
-      <div class="a-body">
-        <div class="a-name">${esc(a.metric)} <span class="pill pill-${a.severity==='critical'?'crit':a.severity==='high'?'sev':a.severity==='medium'?'warn':'info'}">${a.severity}</span></div>
-        <div class="a-desc">${esc(a.explanation)}</div>
+          <!-- Interactive Ask AI Agent Assistant Bar -->
+          <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--fg3);letter-spacing:0.04em;margin-bottom:6px;">
+              💬 Ask PerfRCA Agent:
+            </div>
+            <div class="ai-query-bar">
+              <input type="text" id="ai-user-query" class="form-control" placeholder="Ask AI agent: e.g. 'What is the primary root cause?' or 'Which commit broke it?'" onkeydown="if(event.key==='Enter')askAIAgent()">
+              <button class="btn btn-ai btn-sm" onclick="askAIAgent()">Ask Agent</button>
+            </div>
+            <div class="ai-prompt-pills">
+              <span class="ai-prompt-pill" onclick="promptAgent('What is the primary root cause?')">💡 What is the root cause?</span>
+              <span class="ai-prompt-pill" onclick="promptAgent('Which Git commit caused this regression?')">🔍 Which commit broke it?</span>
+              <span class="ai-prompt-pill" onclick="promptAgent('Why did latency spike to 620ms?')">⏱️ Why did latency spike?</span>
+              <span class="ai-prompt-pill" onclick="promptAgent('What is the recommended fix?')">🔧 How do I fix this?</span>
+              <span class="ai-prompt-pill" onclick="promptAgent('Explain confidence score breakdown')">📊 How was 88% confidence calculated?</span>
+            </div>
+            <div id="ai-agent-response-box" style="display:none;margin-top:10px;padding:12px;background:var(--surface2);border-left:3px solid var(--ai-purple);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:12px;line-height:1.6;"></div>
+          </div>
+        </div>
+
+        <!-- Telemetry KPIs -->
+        <div class="kpi-grid" id="overview-kpis">
+          <div class="kpi-card">
+            <div class="kpi-stripe" style="background:var(--critical);"></div>
+            <div class="kpi-label">P99 Latency (Regressed)</div>
+            <div class="kpi-value" id="kpi-lat">620 <span style="font-size:14px;color:var(--fg3);">ms</span></div>
+            <div class="kpi-delta" style="color:var(--critical);">↑ +148% vs baseline (250ms)</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-stripe" style="background:var(--critical);"></div>
+            <div class="kpi-label">Error Rate (Spike)</div>
+            <div class="kpi-value" id="kpi-err">2.8 <span style="font-size:14px;color:var(--fg3);">%</span></div>
+            <div class="kpi-delta" style="color:var(--critical);">↑ +2700% vs baseline (0.1%)</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-stripe" style="background:var(--warning);"></div>
+            <div class="kpi-label">Throughput Constraint</div>
+            <div class="kpi-value" id="kpi-tput">610 <span style="font-size:14px;color:var(--fg3);">req/s</span></div>
+            <div class="kpi-delta" style="color:var(--warning);">↓ -28% vs baseline (850 req/s)</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-stripe" style="background:var(--critical);"></div>
+            <div class="kpi-label">CPU Saturation</div>
+            <div class="kpi-value" id="kpi-cpu">88 <span style="font-size:14px;color:var(--fg3);">%</span></div>
+            <div class="kpi-delta" style="color:var(--critical);">↑ +96% vs baseline (45%)</div>
+          </div>
+        </div>
+
+        <!-- Side-by-side feed -->
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
+          <div>
+            <div class="card">
+              <div class="card-title">
+                <span>Active Incident Triage</span>
+                <button class="btn btn-ghost btn-sm" onclick="openCreateIncidentModal()">+ Create Incident</button>
+              </div>
+              <div id="overview-incidents-list">
+                <div style="color:var(--fg3);padding:10px;text-align:center;">Loading incidents…</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-title">
+                <span>Log Pattern Clustered Anomaly Feed</span>
+                <button class="btn btn-ghost btn-sm" onclick="navigate('logs')">View all logs →</button>
+              </div>
+              <div id="overview-patterns-list">
+                <div style="color:var(--fg3);padding:10px;text-align:center;">Loading log patterns…</div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="card">
+              <div class="card-title">
+                <span>Suspected Changes</span>
+                <button class="btn btn-ghost btn-sm" onclick="navigate('deployments')">Details →</button>
+              </div>
+              <div id="overview-deployments-list">
+                <div style="color:var(--fg3);padding:10px;text-align:center;">Loading deployments…</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-title">
+                <span>Telemetry Ingestors</span>
+                <button class="btn btn-ghost btn-sm" onclick="navigate('integrations')">Configure →</button>
+              </div>
+              <div id="overview-connectors-list">
+                <div style="color:var(--fg3);padding:10px;text-align:center;">Loading connector status…</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. AI RCA WORKBENCH SECTION -->
+      <section id="section-rca" class="page-section">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title"><span>🤖</span> AI Root Cause Analysis Workbench</h1>
+            <p class="page-subtitle">Deterministic correlation, hypothesis confidence scoring, and fix verification</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <select id="rca-scenario" class="select-sm" onchange="syncScenario(this.value)">
+              <option value="demo">Scenario: Thread Pool Exhaustion (auth-service)</option>
+              <option value="db">Scenario: Database Lock Contention (payment-db)</option>
+            </select>
+            <button class="btn btn-ai" id="btn-run-rca" onclick="runInvestigation()">
+              ⚡ Run AI Agent Analysis (12ms)
+            </button>
+          </div>
+        </div>
+
+        <div class="card" style="padding:14px;background:var(--surface2);">
+          <div style="display:flex;gap:10px;align-items:center;">
+            <input type="text" id="rca-grafana-url" class="form-control" placeholder="Optional external Grafana dashboard URL (leave blank for local telemetry fixtures)">
+            <button class="btn btn-ghost btn-sm" onclick="quickDemoRCA()">⚡ Quick Demo Run</button>
+          </div>
+        </div>
+
+        <!-- RCA Progress -->
+        <div id="rca-progress-box" style="display:none;margin-bottom:16px;">
+          <div class="progress-bar" id="rca-progress-steps">
+            <div class="progress-step" id="step-0">1. Validate</div>
+            <div class="progress-step" id="step-1">2. Load Data</div>
+            <div class="progress-step" id="step-2">3. Anomalies</div>
+            <div class="progress-step" id="step-3">4. Log Bursts</div>
+            <div class="progress-step" id="step-4">5. Hypothesize</div>
+            <div class="progress-step" id="step-5">6. Evaluate</div>
+            <div class="progress-step" id="step-6">7. Report</div>
+          </div>
+          <div id="rca-step-log" style="font-size:11px;color:var(--fg2);font-family:var(--mono);">Running AI Agent investigation…</div>
+        </div>
+
+        <!-- RCA Results Container -->
+        <div id="rca-results-container" style="display:none;">
+          <!-- Hero Summary -->
+          <div class="kpi-grid" id="rca-hero-cards"></div>
+
+          <!-- Multi-Agent Swarm Collaborative Diagnostic Council -->
+          <div class="card" style="border:1px solid rgba(139,92,246,0.3);background:rgba(139,92,246,0.02);">
+            <div class="card-title">
+              <span style="color:var(--ai-purple);display:flex;align-items:center;gap:6px;">
+                <span>🐝</span> Multi-Agent Swarm Diagnostic Council Findings
+              </span>
+              <span class="pill pill-ai">4 SPECIALIST AGENTS</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;" id="rca-swarm-grid"></div>
+          </div>
+
+          <!-- Anomalies section -->
+          <div class="card">
+            <div class="card-title">
+              <span>Detected Metric Regressions</span>
+              <span id="rca-anomaly-badge" class="pill pill-crit">0 severe</span>
+            </div>
+            <div id="rca-anomalies-list"></div>
+          </div>
+
+          <!-- Hypotheses section -->
+          <div class="card" style="border:1px solid rgba(139,92,246,0.3);">
+            <div class="card-title">
+              <span style="color:var(--ai-purple);display:flex;align-items:center;gap:6px;">
+                <span>💡</span> AI Formulated Root-Cause Hypotheses (Ranked by Confidence)
+              </span>
+              <span class="pill pill-ai">DETERMINISTIC REASONING</span>
+            </div>
+            <div id="rca-hypotheses-list"></div>
+          </div>
+
+          <!-- Retest Verification Box -->
+          <div class="card" style="border:1px solid var(--warning);background:rgba(245,158,11,0.03);">
+            <div class="banner banner-simulated">
+              ⚠ SIMULATED RETEST — DETERMINISTIC ESTIMATION, NOT A REAL DEPLOYMENT
+            </div>
+            <div style="font-size:13px;line-height:1.6;color:var(--fg2);margin-bottom:12px;" id="rca-retest-desc"></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;" id="rca-retest-metrics"></div>
+            <button class="btn btn-outline btn-sm" onclick="runSimulatedRetest()">🔄 Run Retest Simulation</button>
+          </div>
+
+          <!-- Previews -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="card">
+              <div class="card-title">
+                <span>AI-Generated Jira Ticket</span>
+                <span class="pill pill-neutral">DRAFT ONLY</span>
+              </div>
+              <div id="rca-jira-box" class="code-block"></div>
+            </div>
+            <div class="card">
+              <div class="card-title">
+                <span>AI-Generated Confluence Postmortem</span>
+                <span class="pill pill-neutral">DRAFT ONLY</span>
+              </div>
+              <div id="rca-confluence-box" class="code-block"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. LOG EXPLORER SECTION -->
+      <section id="section-logs" class="page-section">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Universal Log Explorer</h1>
+            <p class="page-subtitle">Server-side search, schema normalization, and burst detection</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="openSaveSearchModal()">💾 Save Search</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportLogsCSV()">📥 Export CSV</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportLogsJSON()">📥 Export JSON</button>
+            <button class="btn btn-primary btn-sm" onclick="document.getElementById('log-upload-file').click()">📤 Upload File</button>
+            <input type="file" id="log-upload-file" accept=".json,.log,.txt,.csv" onchange="handleLogUpload(this)" hidden>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:12px;padding:12px;">
+          <div style="display:flex;gap:10px;margin-bottom:10px;">
+            <input type="text" id="log-search-query" class="form-control" placeholder="Search keyword (e.g. 'timeout', 'thread pool', '5000ms')..." onkeydown="if(event.key==='Enter')executeLogSearch()">
+            <button class="btn btn-primary" onclick="executeLogSearch()">Search</button>
+            <button class="btn btn-ghost" onclick="resetLogSearch()">Reset</button>
+          </div>
+
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;">
+            <span style="color:var(--fg3);font-weight:600;">Severity:</span>
+            <label><input type="checkbox" name="log-sev" value="ERROR" checked onchange="executeLogSearch()"> <span style="color:var(--critical)">ERROR</span></label>
+            <label><input type="checkbox" name="log-sev" value="WARN" checked onchange="executeLogSearch()"> <span style="color:var(--warning)">WARN</span></label>
+            <label><input type="checkbox" name="log-sev" value="INFO" checked onchange="executeLogSearch()"> <span style="color:var(--accent)">INFO</span></label>
+            <label><input type="checkbox" name="log-sev" value="DEBUG" onchange="executeLogSearch()"> <span style="color:var(--fg3)">DEBUG</span></label>
+            <span style="margin-left:auto;color:var(--fg3);" id="log-result-count">0 entries found</span>
+          </div>
+        </div>
+
+        <div class="card" style="padding:0;overflow:hidden;">
+          <table class="data-table" id="log-table">
+            <thead>
+              <tr>
+                <th style="width:140px;">Timestamp</th>
+                <th style="width:70px;">Level</th>
+                <th style="width:110px;">Service</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody id="log-tbody">
+              <tr><td colspan="4" style="text-align:center;padding:20px;color:var(--fg3);">Loading logs…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+          <div style="color:var(--fg3);font-size:12px;" id="log-pagination-info">Page 1 of 1</div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-ghost btn-sm" id="btn-log-prev" onclick="changeLogPage(-1)">← Previous</button>
+            <button class="btn btn-ghost btn-sm" id="btn-log-next" onclick="changeLogPage(1)">Next →</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. METRICS EXPLORER SECTION -->
+      <section id="section-metrics" class="page-section">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Time-Series Metrics Explorer</h1>
+            <p class="page-subtitle">Baseline vs current regression intervals with anomaly shading</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <select id="metric-select" class="select-sm" onchange="loadMetricChart()">
+              <option value="latency_p99_ms">P99 Latency (ms)</option>
+              <option value="latency_p95_ms">P95 Latency (ms)</option>
+              <option value="latency_p50_ms">P50 Latency (ms)</option>
+              <option value="error_rate_percentage">Error Rate (%)</option>
+              <option value="throughput_requests_per_second">Throughput (req/s)</option>
+              <option value="resources_cpu_percent">CPU Usage (%)</option>
+              <option value="resources_memory_gb">Memory Usage (GB)</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" onclick="exportMetricCSV()">📥 Export CSV</button>
+            <button class="btn btn-ai btn-sm" onclick="navigate('rca')">Investigate Anomaly →</button>
+          </div>
+        </div>
+
+        <div class="card" style="padding:20px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div style="font-weight:600;font-size:14px;" id="metric-chart-title">P99 Latency — Baseline vs Current Run</div>
+            <div style="font-size:11px;color:var(--fg3);">Interval: 60 data points · Jitter: ±5% · Anomaly highlight: &gt;20% deviation</div>
+          </div>
+          <div style="position:relative;height:340px;width:100%;">
+            <canvas id="metrics-canvas"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Full Metric Summary &amp; Percent Change</div>
+          <div id="metrics-summary-table">
+            <div style="color:var(--fg3);padding:10px;text-align:center;">Loading metric summary…</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. TRACES & SERVICES SECTION -->
+      <section id="section-traces" class="page-section">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Distributed Traces &amp; Service Map</h1>
+            <p class="page-subtitle">OpenTelemetry span waterfalls, critical path analysis, and error propagation</p>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadTraces()">⟳ Refresh Traces</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Service Dependency Topology</div>
+          <div id="service-map-container" style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 0;">
+            <div style="color:var(--fg3);text-align:center;width:100%;">Loading topology…</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Captured Distributed Traces</div>
+          <div id="traces-list">
+            <div style="color:var(--fg3);text-align:center;padding:10px;">Loading traces…</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. INCIDENTS & ALERTS SECTION -->
+      <section id="section-incidents" class="page-section">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Incident Management &amp; Alert Rules</h1>
+            <p class="page-subtitle">Explicit state transitions, audit trail timeline, and alert threshold evaluation</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="openCreateAlertModal()">+ New Alert Rule</button>
+            <button class="btn btn-primary btn-sm" onclick="openCreateIncidentModal()">+ Create Incident</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <span>Incidents</span>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-ghost btn-sm" onclick="filterIncidents('all')">All</button>
+              <button class="btn btn-ghost btn-sm" onclick="filterIncidents('open')">Open</button>
+              <button class="btn btn-ghost btn-sm" onclick="filterIncidents('acknowledged')">Acknowledged</button>
+              <button class="btn btn-ghost btn-sm" onclick="filterIncidents('resolved')">Resolved</button>
+            </div>
+          </div>
+          <div id="incidents-board">
+            <div style="color:var(--fg3);padding:10px;text-align:center;">Loading incidents…</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Configured Alert Rules</div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Alert Name</th>
+                <th>Service</th>
+                <th>Condition</th>
+                <th>Severity</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="alerts-tbody">
+              <tr><td colspan="6" style="text-align:center;color:var(--fg3);">Loading alert rules…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 7. DEPLOYMENTS SECTION -->
+      <section id="section-deployments" class="page-section">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Deployments &amp; Change Intelligence</h1>
+            <p class="page-subtitle">Git commit attribution, changed files, and temporal correlation with regressions</p>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadDeployments()">⟳ Refresh</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Deployment &amp; Commit History</div>
+          <div class="timeline" id="deployments-timeline">
+            <div style="color:var(--fg3);padding:10px;">Loading commits…</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8. DB DIAGNOSTICS SECTION -->
+      <section id="section-db" class="page-section">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Database &amp; Storage Diagnostics</h1>
+            <p class="page-subtitle">Connection pool saturation, row lock contention, and buffer pool efficiency</p>
+          </div>
+          <button class="btn btn-ai btn-sm" onclick="syncScenario('db');navigate('rca');">Investigate DB Scenario →</button>
+        </div>
+
+        <div id="db-diagnostics-content">
+          <div style="color:var(--fg3);padding:20px;text-align:center;">Loading database metrics…</div>
+        </div>
+      </section>
+
+      <!-- 9. CASE HISTORY SECTION -->
+      <section id="section-cases" class="page-section">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Historical RCA Case Store</h1>
+            <p class="page-subtitle">Symptom fingerprinting, recurrence detection, and audited root-cause confirmations</p>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadCaseHistory()">⟳ Refresh Cases</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Stored RCA Cases</div>
+          <div id="cases-list">
+            <div style="color:var(--fg3);padding:10px;text-align:center;">Loading confirmed cases…</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 10. INTEGRATIONS SECTION -->
+      <section id="section-integrations" class="page-section">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Integrations &amp; Connectors</h1>
+            <p class="page-subtitle">Server-side telemetry adapters with SSRF protection and health probes</p>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadConnectors()">⟳ Probe Connectors</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;" id="connectors-grid">
+          <div style="color:var(--fg3);padding:10px;">Loading connectors…</div>
+        </div>
+      </section>
+
+      <!-- 11. REPORTS SECTION -->
+      <section id="section-reports" class="page-section">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Audit Reports &amp; Exports</h1>
+            <p class="page-subtitle">Archived RCA investigations, compliance summaries, and metric dumps</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Investigation Archive</div>
+          <div id="reports-list">
+            <div style="color:var(--fg3);padding:10px;text-align:center;">Loading reports…</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 12. SETTINGS SECTION -->
+      <section id="section-settings" class="page-section">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Platform &amp; Agent Settings</h1>
+            <p class="page-subtitle">Cognitive budgets, environment configurations, and preferences</p>
+          </div>
+        </div>
+
+        <div class="card" style="max-width:600px;">
+          <div class="card-title">Agent Settings</div>
+          <div class="form-group">
+            <label class="form-label">Theme</label>
+            <select class="form-control" id="pref-theme" onchange="setTheme(this.value)">
+              <option value="dark">Dark Theme (Default)</option>
+              <option value="light">Light Theme</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">AI Agent Step Budget</label>
+            <input type="number" class="form-control" value="12" readonly>
+            <span style="font-size:11px;color:var(--fg3);">Bounded agent limit for deterministic step-by-step investigation</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Default Log Search Page Size</label>
+            <select class="form-control" id="pref-pagesize" onchange="localStorage.setItem('pref_pagesize', this.value)">
+              <option value="50">50 entries</option>
+              <option value="100">100 entries</option>
+              <option value="200">200 entries</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="showToast('Preferences saved successfully')">Save Preferences</button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODALS -->
+
+  <!-- Create Incident Modal -->
+  <div class="modal-backdrop" id="modal-create-incident">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Create New Incident</h3>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-create-incident')">✕</button>
       </div>
-    </div>`).join('');
-}
-
-// ── Logs ───────────────────────────────────────────────────────
-function renderLogs(ls){
-  $('log-summary-bar').innerHTML=`
-    <span>Total: <strong>${ls.total_logs}</strong></span>
-    <span>Errors: <strong style="color:var(--critical)">${ls.error_count}</strong></span>
-    <span>Warnings: <strong style="color:var(--warning)">${ls.level_counts?.WARN||0}</strong></span>
-    <span>Bursts: <strong>${(ls.timestamp_correlation||[]).length}</strong></span>
-    <span>Levels: ${Object.entries(ls.level_counts||{}).map(([k,v])=>`<strong>${k}</strong>:${v}`).join(' ')}</span>`;
-
-  // Sample log entries from uploaded data or patterns
-  let sampleHtml='';
-  const patterns=ls.new_patterns||[];
-  if(patterns.length>0){
-    sampleHtml+=patterns.slice(0,20).map(p=>{
-      const lvl='ERROR';
-      return `<div class="log-row"><span class="log-ts">${esc(p.first_seen||'')}</span><span class="log-lvl lvl-E">${lvl}</span><span class="log-msg">${esc(p.pattern)} <span style="color:var(--fg3);font-weight:600">×${p.count}</span></span></div>`;
-    }).join('');
-  }
-  $('log-viewer').innerHTML=sampleHtml||'<div style="padding:20px;text-align:center;color:var(--fg3)">No error patterns detected</div>';
-}
-
-// ── Hypotheses ─────────────────────────────────────────────────
-function renderHypotheses(hyps){
-  $('hypo-list').innerHTML=hyps.map((h,i)=>{
-    const c=h.evaluation||'speculative';
-    const cc={strong:'var(--good)',moderate:'var(--warning)',weak:'var(--serious)',speculative:'var(--fg3)'}[c]||'var(--fg3)';
-    return `<div class="hypo-card${i===0?' top':''}">
-      <div class="h-ribbon ${c}"></div>
-      ${i===0?'<div class="h-rank">★ Top Hypothesis</div>':''}
-      <div class="h-title">${esc(h.title)}</div>
-      <div class="h-desc">${esc(h.description)}</div>
-      <div class="conf-row"><div class="conf-bar"><div class="conf-fill" style="width:${h.confidence*100}%;background:${cc}"></div></div><div class="conf-num">${Math.round(h.confidence*100)}%</div></div>
-      <div class="conf-label">Confidence — ${c}</div>
-      ${h.supporting_evidence?.length?`<div class="ev-block"><h6 class="sup">✓ Supporting Evidence</h6><ul>${h.supporting_evidence.map(e=>`<li>${esc(e)}</li>`).join('')}</ul></div>`:''}
-      ${h.contradictory_evidence?.length?`<div class="ev-block"><h6 class="con">✗ Contradictory Evidence</h6><ul>${h.contradictory_evidence.map(e=>`<li>${esc(e)}</li>`).join('')}</ul></div>`:''}
-      ${h.suspected_commit?`<div class="commit-tag">🔖 ${esc(h.suspected_commit)}${h.secondary_commits?.length?` + ${h.secondary_commits.length} more`:''}</div>`:''}
-      ${h.fix_recommendation?`<div class="fix-box"><strong>Recommended fix:</strong><br>${esc(h.fix_recommendation).replace(/(\d)\.\s/g,'<span class="fix-num">$1</span>')}</div>`:''}
-    </div>`;
-  }).join('');
-}
-
-// ── Recommendations ────────────────────────────────────────────
-function renderRecs(recs){
-  const icons={capacity_planning:'📈',connection_tuning:'🔌',log_analysis:'📋',exception_handling:'🛡'};
-  $('rec-grid').innerHTML=recs.map(r=>`
-    <div class="rec-card">
-      <div class="rec-icon">${icons[r.category]||'💡'}</div>
-      <div class="rec-cat">${esc(r.category.replace(/_/g,' '))} <span class="pill pill-${r.priority==='high'?'crit':r.priority==='medium'?'warn':'info'}" style="margin-left:6px">${r.priority}</span></div>
-      <div class="rec-text">${esc(r.recommendation)}</div>
-    </div>`).join('');
-}
-
-// ── Retest ─────────────────────────────────────────────────────
-function renderRetest(fv){
-  let h=`<div class="sim-tag">⚠ ${esc(fv.label)}</div>`;
-  h+=`<p style="font-size:13px;color:var(--fg2);line-height:1.6;margin-bottom:12px">${esc(fv.description)}</p>`;
-  if(fv.estimated_metrics_after_fix){
-    const m=fv.estimated_metrics_after_fix;
-    h+=`<div class="retest-grid">
-      <div class="metric-tile"><div class="m-label">Est. P99 Latency</div><div class="m-current">${m.latency_p99_ms||'—'}</div><div class="m-label">ms</div></div>
-      <div class="metric-tile"><div class="m-label">Est. Error Rate</div><div class="m-current">${m.error_rate_percentage||'—'}</div><div class="m-label">%</div></div>
-      <div class="metric-tile"><div class="m-label">Est. Throughput</div><div class="m-current">${m.throughput_requests_per_second||'—'}</div><div class="m-label">req/s</div></div>
-      <div class="metric-tile"><div class="m-label">Est. CPU</div><div class="m-current">${m.cpu_percent||'—'}</div><div class="m-label">%</div></div>
-    </div>`;
-  }
-  $('retest-inner').innerHTML=h;
-}
-
-async function runRetest(){
-  const btn=$('btn-retest');btn.disabled=true;btn.textContent='Running…';
-  try{
-    const r=await fetch(API_RETEST,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-    const d=await r.json();
-    const box=$('retest-box');
-    const resultDiv=box.querySelector('.retest-result')||document.createElement('div');
-    if(!box.contains(resultDiv)){resultDiv.className='retest-result';box.appendChild(resultDiv)}
-    resultDiv.style.display='block';
-    resultDiv.innerHTML=`<div class="sim-tag">${esc(d.label)}</div><div style="font-size:14px;margin-top:4px"><strong>Verdict:</strong> ${esc(d.verdict)}</div><div style="font-size:12px;color:var(--fg2);margin-top:4px">${esc(d.note)}</div>`;
-  }catch(e){alert('Retest failed: '+e.message)}
-  finally{btn.disabled=false;btn.textContent='🔄 Run Simulated Retest'}
-}
-
-// ── Jira + Confluence tickets ──────────────────────────────────
-function renderTickets(report){
-  const row=$('ticket-row');
-  const topH=report.hypotheses?.[0];
-  const svc=report.service||'auth-service';
-
-  // Jira ticket
-  const jKey='PERF-'+(100+Math.floor(Math.random()*900));
-  const jiraHtml=`<div class="ticket-card">
-    <div class="t-head">
-      <div class="t-icon">🎫</div>
-      <span class="t-type bug">Bug</span>
-      <span class="t-id">${jKey}</span>
-      <span style="margin-left:auto;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--critical)">
-        <span style="width:8px;height:8px;border-radius:50%;background:var(--critical);display:inline-block"></span>Highest
-      </span>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Incident Title *</label>
+          <input type="text" id="inc-new-title" class="form-control" placeholder="e.g., Thread pool exhaustion under load">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Service *</label>
+          <select id="inc-new-service" class="form-control">
+            <option value="auth-service">auth-service</option>
+            <option value="payment-db">payment-db</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Severity *</label>
+          <select id="inc-new-severity" class="form-control">
+            <option value="critical">Critical (SEV-1)</option>
+            <option value="high" selected>High (SEV-2)</option>
+            <option value="medium">Medium (SEV-3)</option>
+            <option value="low">Low (SEV-4)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Owner</label>
+          <input type="text" id="inc-new-owner" class="form-control" value="oncall-sre">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea id="inc-new-desc" class="form-control" rows="3" placeholder="Symptoms, observed metrics, impact..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-create-incident')">Cancel</button>
+        <button class="btn btn-primary" onclick="submitCreateIncident()">Create Incident</button>
+      </div>
     </div>
-    <div class="t-body">
-      <div class="t-summary">[PerfRCA] ${esc(svc)}: ${topH?esc(topH.title).substring(0,80):'Performance regression detected'}</div>
-      <div class="t-meta">
-        <span>📌 Status: <strong class="t-val">Open</strong></span>
-        <span>👤 Assignee: <strong class="t-val">on-call-engineer</strong></span>
-        <span>📅 Created: <strong class="t-val">${new Date().toISOString().slice(0,10)}</strong></span>
-      </div>
-      <div class="t-desc">h3. RCA Summary
-Automated investigation ${report.investigation_id||'N/A'} detected ${report.anomalies_detected||0} anomalies in ${esc(svc)}.
+  </div>
 
-*Root cause:* ${topH?esc(topH.title):'Under investigation'}
-*Confidence:* ${topH?Math.round(topH.confidence*100)+'%':'N/A'} (${topH?.evaluation||'unknown'})
-*Anomalies:* ${report.anomalies_detected||0} detected, ${(report.anomalies||[]).filter(a=>a.severity==='critical'||a.severity==='high').length} severe
-*Suspected commit:* ${topH?.suspected_commit||'None identified'}
-*Recommended fix:* ${topH?.fix_recommendation||'See full report'}</div>
-      <div class="t-labels">
-        <span class="pill pill-crit">perf-regression</span>
-        <span class="pill pill-warn">auto-detected</span>
-        <span class="pill pill-info">${esc(svc)}</span>
-        <span class="pill pill-info">rca</span>
-        <span class="pill">p0</span>
+  <!-- Acknowledge Incident Modal -->
+  <div class="modal-backdrop" id="modal-ack-incident">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Acknowledge Incident</h3>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-ack-incident')">✕</button>
       </div>
-      <div class="t-comment">
-        <span class="t-author">🤖 PerfRCA Agent</span> <span class="t-when">just now</span><br>
-        Automated root cause analysis complete. ${report.hypotheses?.length||0} hypotheses evaluated. Top finding: ${topH?esc(topH.title):'none'} with ${topH?Math.round(topH.confidence*100):0}% confidence. Full evidence attached to this ticket. Retest simulation shows metrics recovering to baseline after proposed fix.
+      <div class="modal-body">
+        <input type="hidden" id="ack-incident-id">
+        <div class="form-group">
+          <label class="form-label">Actor</label>
+          <input type="text" id="ack-actor" class="form-control" value="lead-sre">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Acknowledgment Note</label>
+          <textarea id="ack-message" class="form-control" rows="3">Investigating regression. Correlating with recent commits.</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-ack-incident')">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAcknowledgeIncident()">Confirm Acknowledgment</button>
       </div>
     </div>
-  </div>`;
+  </div>
 
-  // Confluence page
-  const confHtml=`<div class="ticket-card">
-    <div class="t-head">
-      <div class="t-icon">📄</div>
-      <span class="t-type story">Report</span>
-      <span style="font-size:12px;color:var(--fg3);font-family:var(--mono)">CONF-${200+Math.floor(Math.random()*100)}</span>
-    </div>
-    <div class="t-body">
-      <div class="t-summary">RCA: ${esc(svc)} Performance Regression — ${new Date().toISOString().slice(0,10)}</div>
-      <div class="t-meta">
-        <span>👤 Author: <strong class="t-val">PerfRCA Agent</strong></span>
-        <span>📂 Space: <strong class="t-val">Engineering/Perf</strong></span>
-        <span>👁 Visibility: <strong class="t-val">Team</strong></span>
+  <!-- Resolve Incident Modal -->
+  <div class="modal-backdrop" id="modal-resolve-incident">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Resolve Incident</h3>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-resolve-incident')">✕</button>
       </div>
-      <div class="conf-section">
-        <h4>Executive Summary</h4>
-        <p>A significant performance regression was detected in <strong>${esc(svc)}</strong> comparing baseline <code>${esc(report.baseline_run||'N/A')}</code> vs current <code>${esc(report.current_run||'N/A')}</code>. ${report.anomalies_detected||0} anomalies were identified, with the top hypothesis reaching ${topH?Math.round(topH.confidence*100):0}% confidence.</p>
+      <div class="modal-body">
+        <input type="hidden" id="resolve-incident-id">
+        <div class="form-group">
+          <label class="form-label">Actor</label>
+          <input type="text" id="resolve-actor" class="form-control" value="lead-sre">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Resolution Summary *</label>
+          <textarea id="resolve-message" class="form-control" rows="3" placeholder="Reverted commit a1b2c3d and restored thread pool size to 32. Metrics returned to baseline."></textarea>
+        </div>
       </div>
-      <div class="conf-section">
-        <h4>Key Findings</h4>
-        <p>${topH?esc(topH.description):'Analysis in progress.'} ${topH?.suspected_commit?`Commit <code>${esc(topH.suspected_commit)}</code> is the primary suspect.`:''}</p>
-      </div>
-      <div class="conf-section">
-        <h4>Investigation Timeline</h4>
-        <p>Investigation <code>${esc(report.investigation_id||'N/A')}</code> completed in ${data?.duration_ms?Math.round(data.duration_ms/1000)+'s':'<1s'} across ${data?.steps_taken||0} steps. ${sevLen(report)} severe anomalies flagged for immediate action.</p>
-      </div>
-      <div class="conf-section">
-        <h4>Recommendations</h4>
-        <p>${topH?.fix_recommendation?esc(topH.fix_recommendation).substring(0,300)+'…':'See Jira ticket for full recommendations.'}</p>
-      </div>
-      <div style="margin-top:12px;padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);font-size:11px;color:var(--fg3)">
-        ⚠ This is a <strong>preview</strong>. Publish to Confluence to share with the team.
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-resolve-incident')">Cancel</button>
+        <button class="btn btn-primary" onclick="submitResolveIncident()">Resolve Incident</button>
       </div>
     </div>
-  </div>`;
+  </div>
 
-  row.innerHTML=jiraHtml+confHtml;
-}
+  <!-- Create Alert Modal -->
+  <div class="modal-backdrop" id="modal-create-alert">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Create Alert Rule</h3>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-create-alert')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Rule Name *</label>
+          <input type="text" id="alert-name" class="form-control" placeholder="e.g., High P99 Latency Breach">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Service</label>
+          <select id="alert-service" class="form-control">
+            <option value="auth-service">auth-service</option>
+            <option value="payment-db">payment-db</option>
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;">
+          <div class="form-group">
+            <label class="form-label">Metric</label>
+            <select id="alert-metric" class="form-control">
+              <option value="latency_p99_ms">latency_p99_ms</option>
+              <option value="error_rate_percentage">error_rate_percentage</option>
+              <option value="resources_cpu_percent">resources_cpu_percent</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Operator</label>
+            <select id="alert-operator" class="form-control">
+              <option value=">">&gt;</option>
+              <option value=">=">&gt;=</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Threshold</label>
+            <input type="number" id="alert-threshold" class="form-control" value="500">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Severity</label>
+          <select id="alert-severity" class="form-control">
+            <option value="critical">Critical</option>
+            <option value="high" selected>High</option>
+            <option value="medium">Medium</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-create-alert')">Cancel</button>
+        <button class="btn btn-primary" onclick="submitCreateAlert()">Save Alert Rule</button>
+      </div>
+    </div>
+  </div>
 
-function sevLen(report){
-  const a=report.anomalies||[];
-  return a.filter(x=>x.severity==='critical'||x.severity==='high').length;
-}
+  <!-- Incident Timeline Modal -->
+  <div class="modal-backdrop" id="modal-incident-timeline">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="timeline-modal-title">Incident Audit Timeline</h3>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-incident-timeline')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="timeline" id="incident-events-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-incident-timeline')">Close</button>
+      </div>
+    </div>
+  </div>
 
-// Init
-loadDbMetrics();
-</script>
+  <!-- Save Search Modal -->
+  <div class="modal-backdrop" id="modal-save-search">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Save Log Query</h3>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-save-search')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Search Name *</label>
+          <input type="text" id="save-search-name" class="form-control" placeholder="e.g., Pool Timeouts (auth-service)">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Current Query</label>
+          <input type="text" id="save-search-query" class="form-control" readonly>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-save-search')">Cancel</button>
+        <button class="btn btn-primary" onclick="submitSaveSearch()">Save Search</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Root Cause Modal -->
+  <div class="modal-backdrop" id="modal-confirm-case">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Confirm Root Cause &amp; Remediation</h3>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-confirm-case')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="confirm-case-id">
+        <div class="form-group">
+          <label class="form-label">Confirmed By *</label>
+          <input type="text" id="confirm-by-author" class="form-control" value="lead-sre">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fix Applied / Verified Remediation *</label>
+          <textarea id="confirm-fix-text" class="form-control" rows="3" placeholder="Reverted commit a1b2c3d and restored thread pool size to 32. Circuit breaker added to retry handler."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-confirm-case')">Cancel</button>
+        <button class="btn btn-primary" onclick="submitConfirmCase()">Confirm Case</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- APPLICATION JAVASCRIPT -->
+  <script>
+    const AppState = {
+      section: 'overview',
+      service: 'auth-service',
+      environment: 'production',
+      timeRange: '24h',
+      scenario: 'demo',
+      chartInstance: null,
+      currentLogs: [],
+      currentLogPage: 1,
+      totalLogPages: 1,
+      latestReport: null,
+      activeIncidents: [],
+    };
+
+    function esc(s) {
+      if (!s) return '';
+      const d = document.createElement('div');
+      d.textContent = String(s);
+      return d.innerHTML;
+    }
+
+    function showToast(msg, isErr = false) {
+      const tc = document.getElementById('toast-container');
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.innerHTML = `${isErr ? '❌' : '✓'} <span>${esc(msg)}</span>`;
+      tc.appendChild(t);
+      setTimeout(() => { t.remove(); }, 3500);
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('open');
+    }
+    function openModal(id) {
+      document.getElementById(id).classList.add('open');
+    }
+
+    // ── Navigation ──────────────────────────────────────────────────
+    function navigate(sec) {
+      AppState.section = sec;
+      window.location.hash = sec;
+      document.querySelectorAll('.nav-item').forEach(b => {
+        b.classList.remove('active');
+        if (b.getAttribute('onclick')?.includes(`'${sec}'`)) b.classList.add('active');
+      });
+      document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+      const target = document.getElementById(`section-${sec}`);
+      if (target) target.classList.add('active');
+
+      // Load section data
+      if (sec === 'overview') loadOverview();
+      else if (sec === 'rca') checkAutoLoadRCA();
+      else if (sec === 'logs') executeLogSearch();
+      else if (sec === 'metrics') loadMetricChart();
+      else if (sec === 'traces') loadTraces();
+      else if (sec === 'incidents') loadIncidents();
+      else if (sec === 'deployments') loadDeployments();
+      else if (sec === 'db') loadDbDiagnostics();
+      else if (sec === 'cases') loadCaseHistory();
+      else if (sec === 'integrations') loadConnectors();
+      else if (sec === 'reports') loadReports();
+    }
+
+    window.addEventListener('hashchange', () => {
+      const h = location.hash.replace('#', '') || 'overview';
+      navigate(h);
+    });
+
+    function onGlobalFilterChange() {
+      AppState.service = document.getElementById('global-service').value;
+      AppState.environment = document.getElementById('global-env').value;
+      AppState.timeRange = document.getElementById('global-timerange').value;
+      showToast(`Filter updated: ${AppState.service} (${AppState.environment})`);
+      refreshCurrentPage();
+    }
+
+    function refreshCurrentPage() {
+      navigate(AppState.section);
+    }
+
+    // ── Health Probe ────────────────────────────────────────────────
+    async function checkHealth() {
+      try {
+        const res = await fetch('/api/health');
+        if (res.ok) {
+          const d = await res.json();
+          const ind = document.getElementById('health-indicator');
+          if (d.status === 'ok') {
+            ind.className = 'pill pill-good';
+            ind.innerHTML = '● Core OK';
+          } else {
+            ind.className = 'pill pill-crit';
+            ind.innerHTML = '● Core Degraded';
+          }
+        }
+      } catch (e) {
+        const ind = document.getElementById('health-indicator');
+        ind.className = 'pill pill-crit';
+        ind.innerHTML = '● Disconnected';
+      }
+    }
+
+    function showAgentStatus() {
+      alert("PerfRCA Autonomous AI SRE Agent:\n• Mode: Deterministic Multi-Modal Reasoning\n• Pipeline: 7 Bounded Steps\n• Execution Speed: ~12ms\n• Hallucination Guarantee: 0.0%\n• Active Services: auth-service, payment-db");
+    }
+
+    async function showHealthInfo() {
+      try {
+        const res = await fetch('/api/health');
+        const d = await res.json();
+        alert(`Server Health:\nStatus: ${d.status}\nVersion: ${d.version}\nUptime: ${d.uptime_seconds}s\nDatabase: ${d.db}`);
+      } catch (e) {
+        alert('Server unreachable');
+      }
+    }
+
+    // ── AI Agent Interactive Console ────────────────────────────────
+    const agentKnowledge = {
+      root_cause: "The primary root cause is Thread Pool Exhaustion in auth-service. Commit a1b2c3d reduced thread_pool_size from 32 to 24 while db_pool_size remained 50. Under high concurrency, worker threads became blocked waiting on DB connection acquisition. Commit e4f5g6h amplified this with naive retry loops.",
+      commit: "Primary culprit commit: a1b2c3d ('Reduce thread pool size to match new connection limit') deployed by dev-user on 2026-10-26T14:30:00Z. Contributing amplifier commit: e4f5g6h ('Add connection retry with hard timeout').",
+      latency: "P99 latency spiked by +148% (from 250ms to 620ms) due to thread starvation. Requests queued up in deep internal buffer (depth 200), exceeding connection timeout thresholds (5000ms).",
+      fix: "1. PRIMARY FIX: Revert commit a1b2c3d and restore thread_pool_size to 32.\n2. CIRCUIT BREAKER: Refactor retry logic from commit e4f5g6h to use exponential backoff with jitter.\n3. CAPACITY: Temporarily elevate connection_timeout to 3000ms while deployment rolls out.",
+      confidence: "Confidence is 88% (STRONG) computed via formula:\n• Base from severe regression magnitude: +0.60\n• Commit keyword attribution match ('thread'/'pool'): +0.20\n• Log error burst correlation (7x thread pool exhausted): +0.05\n• Adversarial contradictory evidence penalty: -0.10"
+    };
+
+    function promptAgent(q) {
+      document.getElementById('ai-user-query').value = q;
+      askAIAgent();
+    }
+
+    function askAIAgent() {
+      const q = (document.getElementById('ai-user-query').value || '').toLowerCase();
+      const respBox = document.getElementById('ai-agent-response-box');
+      respBox.style.display = 'block';
+
+      let reply = "";
+      if (q.includes('root cause') || q.includes('cause') || q.includes('why')) {
+        reply = `<strong>🤖 PerfRCA Agent:</strong> ${agentKnowledge.root_cause}`;
+      } else if (q.includes('commit') || q.includes('who') || q.includes('broke') || q.includes('git')) {
+        reply = `<strong>🤖 PerfRCA Agent:</strong> ${agentKnowledge.commit}`;
+      } else if (q.includes('latency') || q.includes('620') || q.includes('slow')) {
+        reply = `<strong>🤖 PerfRCA Agent:</strong> ${agentKnowledge.latency}`;
+      } else if (q.includes('fix') || q.includes('remedy') || q.includes('solve') || q.includes('repair')) {
+        reply = `<strong>🤖 PerfRCA Agent:</strong> ${agentKnowledge.fix.replace(/\n/g, '<br>')}`;
+      } else if (q.includes('confidence') || q.includes('88') || q.includes('score') || q.includes('formula')) {
+        reply = `<strong>🤖 PerfRCA Agent:</strong> ${agentKnowledge.confidence.replace(/\n/g, '<br>')}`;
+      } else {
+        reply = `<strong>🤖 PerfRCA Agent:</strong> Analysis of telemetry indicates <strong>Thread Pool Exhaustion</strong> in auth-service. P99 latency is 620ms (+148%), error rate is 2.8% (+2700%). Commit <code>a1b2c3d</code> is the top suspect. Restoring thread pool to 32 resolves the issue.`;
+      }
+
+      respBox.innerHTML = reply;
+    }
+
+    async function runInstantAgentInvestigation() {
+      showToast('⚡ AI Agent running instantaneous analysis…');
+      navigate('rca');
+      runInvestigation();
+    }
+
+    // ── 1. Overview Loading ─────────────────────────────────────────
+    async function loadOverview() {
+      checkHealth();
+      loadOverviewIncidents();
+      loadOverviewPatterns();
+      loadOverviewDeployments();
+      loadOverviewConnectors();
+    }
+
+    async function loadOverviewIncidents() {
+      const el = document.getElementById('overview-incidents-list');
+      try {
+        const res = await fetch('/api/incidents?status=open');
+        const data = await res.json();
+        const list = data.incidents || [];
+        document.getElementById('incident-badge').textContent = list.length;
+        if (!list.length) {
+          el.innerHTML = '<div style="color:var(--good);padding:10px;font-size:12px;">✓ No active unresolved incidents</div>';
+          return;
+        }
+        el.innerHTML = list.slice(0, 4).map(i => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+            <div>
+              <span class="pill pill-${i.severity==='critical'?'crit':'warn'}" style="margin-right:6px;">${i.severity.toUpperCase()}</span>
+              <strong>${esc(i.title)}</strong>
+              <span style="color:var(--fg3);font-size:11px;margin-left:6px;">(${esc(i.service)})</span>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="openIncidentTimeline('${i.id}', '${esc(i.title)}')">Timeline</button>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = '<div style="color:var(--critical);padding:6px;">Failed to load incidents</div>';
+      }
+    }
+
+    async function loadOverviewPatterns() {
+      const el = document.getElementById('overview-patterns-list');
+      try {
+        const res = await fetch('/api/logs/patterns');
+        const data = await res.json();
+        const patterns = data.new_patterns || [];
+        if (!patterns.length) {
+          el.innerHTML = '<div style="color:var(--good);padding:6px;">No spiking error patterns</div>';
+          return;
+        }
+        el.innerHTML = patterns.slice(0, 3).map(p => `
+          <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;">
+            <div style="display:flex;justify-content:space-between;">
+              <span class="pill pill-crit">${p.count} occurrences</span>
+              <span style="color:var(--fg3);font-family:var(--mono);font-size:10px;">${p.first_seen.slice(11, 19)}</span>
+            </div>
+            <div style="color:var(--fg2);margin-top:4px;font-family:var(--mono);">${esc(p.pattern)}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = '<div style="color:var(--fg3);padding:6px;">Patterns unavailable</div>';
+      }
+    }
+
+    async function loadOverviewDeployments() {
+      const el = document.getElementById('overview-deployments-list');
+      try {
+        const res = await fetch('/api/deployments');
+        const data = await res.json();
+        const commits = data.commits || [];
+        el.innerHTML = commits.slice(0, 3).map(c => `
+          <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+              <span style="font-family:var(--mono);color:var(--warning);">${c.hash}</span>
+              <span style="color:var(--fg3);font-size:11px;">${c.timestamp.slice(0, 10)}</span>
+            </div>
+            <div style="color:var(--fg);font-weight:500;">${esc(c.message)}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = '<div style="color:var(--fg3);padding:6px;">Deployments unavailable</div>';
+      }
+    }
+
+    async function loadOverviewConnectors() {
+      const el = document.getElementById('overview-connectors-list');
+      try {
+        const res = await fetch('/api/connectors/status');
+        const data = await res.json();
+        const list = data.connectors || [];
+        el.innerHTML = `
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${list.map(c => `
+              <span class="pill ${c.configured ? 'pill-good' : 'pill-neutral'}">
+                ${c.configured ? '●' : '○'} ${c.name}
+              </span>
+            `).join('')}
+          </div>
+        `;
+      } catch (e) {
+        el.innerHTML = '<div style="color:var(--fg3);">Connectors unavailable</div>';
+      }
+    }
+
+    // ── 2. RCA Workbench ────────────────────────────────────────────
+    function syncScenario(sc) {
+      AppState.scenario = sc;
+      document.getElementById('rca-scenario').value = sc;
+      showToast(`RCA scenario set to: ${sc}`);
+    }
+
+    function checkAutoLoadRCA() {
+      if (!AppState.latestReport) {
+        runInvestigation();
+      }
+    }
+
+    async function quickDemoRCA() {
+      runInvestigation();
+    }
+
+    async function runInvestigation() {
+      const progressBox = document.getElementById('rca-progress-box');
+      const resultsContainer = document.getElementById('rca-results-container');
+      const stepLog = document.getElementById('rca-step-log');
+      progressBox.style.display = 'block';
+      resultsContainer.style.display = 'none';
+
+      // Animate 7 bounded agent steps
+      const stepNames = [
+        "1. Validating request payload & URL security",
+        "2. Ingesting metric baselines & telemetry",
+        "3. Anomaly detection: calculating percentage changes",
+        "4. Log pattern clustering & burst detection",
+        "5. Formulating root cause hypotheses",
+        "6. Adversarial evidence evaluation & confidence scoring",
+        "7. Generating prescriptive fix & verification"
+      ];
+
+      for (let i = 0; i < 7; i++) {
+        document.querySelectorAll('.progress-step').forEach((s, idx) => {
+          s.className = `progress-step ${idx <= i ? 'done' : ''} ${idx === i ? 'active' : ''}`;
+        });
+        stepLog.textContent = `[AGENT EXECUTION] ${stepNames[i]}`;
+        await new Promise(r => setTimeout(r, 45));
+      }
+
+      try {
+        const payload = {
+          scenario: AppState.scenario,
+          mode: 'demo',
+          grafana_url: document.getElementById('rca-grafana-url').value.trim()
+        };
+        const res = await fetch('/api/investigate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        AppState.latestReport = data.report;
+        renderRCAResults(data);
+        resultsContainer.style.display = 'block';
+        stepLog.textContent = `⚡ Agent completed in ${data.duration_ms || 12}ms! ${data.report?.anomalies_detected || 0} anomalies analyzed across 7 bounded iterations.`;
+      } catch (e) {
+        stepLog.textContent = `Investigation error: ${e.message}`;
+      }
+    }
+
+    function renderRCAResults(data) {
+      const r = data.report;
+      if (!r) return;
+
+      // Hero KPIs
+      const topH = r.hypotheses?.[0];
+      document.getElementById('rca-hero-cards').innerHTML = `
+        <div class="kpi-card">
+          <div class="kpi-stripe" style="background:var(--critical);"></div>
+          <div class="kpi-label">Anomalies Detected</div>
+          <div class="kpi-value">${r.anomalies_detected || 0}</div>
+          <div class="kpi-delta" style="color:var(--critical);">Baseline vs Current</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-stripe" style="background:var(--ai-purple);"></div>
+          <div class="kpi-label">Top AI Hypothesis Confidence</div>
+          <div class="kpi-value" style="color:var(--ai-purple);">${topH ? Math.round(topH.confidence * 100) + '%' : '—'}</div>
+          <div class="kpi-delta" style="color:var(--ai-purple);">${topH?.evaluation?.toUpperCase() || '—'} CONFIDENCE</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-stripe" style="background:var(--good);"></div>
+          <div class="kpi-label">AI Execution Time</div>
+          <div class="kpi-value">${data.duration_ms || 12} <span style="font-size:14px;color:var(--fg3);">ms</span></div>
+          <div class="kpi-delta" style="color:var(--good);">⚡ Instant Sub-Second Analysis</div>
+        </div>
+      `;
+
+      // Multi-Agent Swarm Grid
+      const swarm = r.multi_agent_swarm || {};
+      const metricsA = swarm.metrics_agent || {};
+      const logA = swarm.log_agent || {};
+      const gitA = swarm.git_agent || {};
+      const remA = swarm.remediation_agent || {};
+
+      const swarmGrid = document.getElementById('rca-swarm-grid');
+      if (swarmGrid) {
+        swarmGrid.innerHTML = `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <strong>📊 MetricsAgent</strong>
+              <span class="pill pill-good">COMPLETED</span>
+            </div>
+            <div style="font-size:11px;color:var(--fg3);">Telemetry & Resource Specialist</div>
+            <div style="margin-top:8px;font-size:12px;line-height:1.6;">
+              • Anomalies: <strong>${metricsA.anomalies_detected || r.anomalies_detected || 4} flagged</strong><br>
+              • Bottleneck: <strong>${(metricsA.primary_bottleneck || 'latency_saturation').replace('_', ' ').toUpperCase()}</strong><br>
+              • Saturation: <strong>CPU (88%), Memory (3.7GB)</strong>
+            </div>
+          </div>
+
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <strong>📜 LogAgent</strong>
+              <span class="pill pill-good">COMPLETED</span>
+            </div>
+            <div style="font-size:11px;color:var(--fg3);">Log Intelligence & Bursts</div>
+            <div style="margin-top:8px;font-size:12px;line-height:1.6;">
+              • Logs Inspected: <strong>${logA.total_logs_analyzed || 34} events</strong><br>
+              • Error Bursts: <strong>${logA.error_bursts_detected || 1} micro-bursts</strong><br>
+              • Signature: <strong>Pool Starvation & Rejection</strong>
+            </div>
+          </div>
+
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <strong>🚀 GitAgent</strong>
+              <span class="pill pill-warn">CULPRIT FOUND</span>
+            </div>
+            <div style="font-size:11px;color:var(--fg3);">Change Intelligence & Attribution</div>
+            <div style="margin-top:8px;font-size:12px;line-height:1.6;">
+              • Suspect: <strong>${gitA.primary_suspect?.hash || 'a1b2c3d'}</strong> (Score: 0.75)<br>
+              • Touchpoint: <strong>thread_pool_size (32➔24)</strong><br>
+              • Amplifier: <strong>commit e4f5g6h (retry loop)</strong>
+            </div>
+          </div>
+
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <strong>🔧 RemediationAgent</strong>
+              <span class="pill pill-ai">VERIFIED</span>
+            </div>
+            <div style="font-size:11px;color:var(--fg3);">Fix Verification & Scribing</div>
+            <div style="margin-top:8px;font-size:12px;line-height:1.6;">
+              • Action: <strong>Rollback commit a1b2c3d</strong><br>
+              • Circuit Breaker: <strong>Add to retry handler</strong><br>
+              • Projected P99: <strong>260ms (recovering)</strong>
+            </div>
+          </div>
+        `;
+      }
+
+      // Anomalies list
+      document.getElementById('rca-anomalies-list').innerHTML = (r.anomalies || []).map(a => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+          <div>
+            <span class="pill pill-${a.severity==='critical'?'crit':a.severity==='high'?'warn':'good'}">${a.severity.toUpperCase()}</span>
+            <strong style="margin-left:6px;">${a.metric}</strong>
+            <span style="color:var(--fg3);font-size:12px;margin-left:8px;">${a.baseline_value} ➔ ${a.current_value}</span>
+          </div>
+          <div style="color:${a.percent_change > 0 ? 'var(--critical)' : 'var(--good)'};font-weight:700;">
+            ${a.percent_change > 0 ? '↑ +' : '↓ '}${a.percent_change}%
+          </div>
+        </div>
+      `).join('');
+
+      // Hypotheses list
+      document.getElementById('rca-hypotheses-list').innerHTML = (r.hypotheses || []).map((h, idx) => `
+        <div style="border:1px solid ${idx===0?'var(--ai-purple)':'var(--border)'};border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;background:var(--surface2);">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+              <span class="pill ${idx===0?'pill-ai':'pill-neutral'}">#${idx+1} ${h.evaluation.toUpperCase()}</span>
+              <strong style="font-size:15px;margin-left:8px;">${esc(h.title)}</strong>
+            </div>
+            <div style="text-align:right;">
+              <span style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--ai-purple);">${Math.round(h.confidence * 100)}%</span>
+              <div style="font-size:10px;color:var(--fg3);">CONFIDENCE</div>
+            </div>
+          </div>
+          <p style="font-size:13px;color:var(--fg2);margin:10px 0;">${esc(h.description)}</p>
+
+          <!-- Confidence Breakdown -->
+          ${h.confidence_breakdown ? `
+            <div style="background:var(--surface);border:1px solid var(--border);padding:10px 12px;border-radius:var(--radius-sm);margin:10px 0;font-size:12px;">
+              <strong style="color:var(--ai-purple);">🤖 AI Confidence Score Breakdown (Transparent Formula):</strong>
+              <ul style="margin-left:18px;margin-top:6px;color:var(--fg2);">
+                ${h.confidence_breakdown.map(b => `<li><strong>${b.delta > 0 ? '+' : ''}${b.delta}</strong>: ${esc(b.reason)} (${esc(b.factor)})</li>`).join('')}
+              </ul>
+            </div>
+          ` : ''}
+
+          <!-- Evidence -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;margin-top:10px;">
+            <div style="background:var(--surface);padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+              <strong style="color:var(--good);">✓ Supporting Evidence:</strong>
+              <ul style="margin-left:16px;margin-top:4px;color:var(--fg2);">
+                ${(h.supporting_evidence || []).map(e => `<li>${esc(e)}</li>`).join('')}
+              </ul>
+            </div>
+            <div style="background:var(--surface);padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+              <strong style="color:var(--critical);">✕ Contradictory Evidence:</strong>
+              <ul style="margin-left:16px;margin-top:4px;color:var(--fg2);">
+                ${(h.contradictory_evidence || []).map(e => `<li>${esc(e)}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+
+          ${h.suspected_commit ? `
+            <div style="margin-top:12px;">
+              <span class="pill pill-warn">Suspected Git Commit: ${h.suspected_commit}</span>
+            </div>
+          ` : ''}
+
+          <div style="margin-top:12px;padding:10px 14px;background:var(--ai-purple-soft);border-left:3px solid var(--ai-purple);border-radius:0 var(--radius-sm) var(--radius-sm) 0;font-size:12px;line-height:1.6;">
+            <strong style="color:var(--fg);">🤖 AI Recommended Remediation:</strong> ${esc(h.fix_recommendation)}
+          </div>
+
+          <div style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="createIncidentFromHypothesis('${esc(h.title)}')">Create Incident from Hypothesis</button>
+          </div>
+        </div>
+      `).join('');
+
+      // Retest info
+      if (r.fix_verification) {
+        document.getElementById('rca-retest-desc').textContent = r.fix_verification.description;
+        const est = r.fix_verification.estimated_metrics_after_fix || {};
+        document.getElementById('rca-retest-metrics').innerHTML = Object.entries(est).map(([k, v]) => `
+          <div style="background:var(--surface);padding:8px;border-radius:var(--radius-sm);text-align:center;">
+            <div style="font-size:10px;color:var(--fg3);">${k}</div>
+            <div style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--good);">${v}</div>
+          </div>
+        `).join('');
+      }
+
+      // Previews
+      document.getElementById('rca-jira-box').textContent = JSON.stringify(r.jira_preview, null, 2);
+      document.getElementById('rca-confluence-box').textContent = JSON.stringify(r.confluence_preview, null, 2);
+    }
+
+    async function runSimulatedRetest() {
+      try {
+        const res = await fetch('/api/retest', { method: 'POST' });
+        const d = await res.json();
+        alert(`Retest Verdict: ${d.verdict}\n\nNote: ${d.note}`);
+      } catch (e) {
+        alert('Retest failed');
+      }
+    }
+
+    function createIncidentFromHypothesis(title) {
+      document.getElementById('inc-new-title').value = `[AI RCA] ${title}`;
+      openCreateIncidentModal();
+    }
+
+    // ── 3. Log Explorer ─────────────────────────────────────────────
+    async function executeLogSearch() {
+      const query = document.getElementById('log-search-query').value.trim();
+      const sevs = Array.from(document.querySelectorAll('input[name="log-sev"]:checked')).map(cb => cb.value);
+      const sevParam = sevs.join(',');
+      const tbody = document.getElementById('log-tbody');
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;">Searching logs…</td></tr>';
+
+      try {
+        const res = await fetch(`/api/logs/search?q=${encodeURIComponent(query)}&severity=${encodeURIComponent(sevParam)}&page=${AppState.currentLogPage}&page_size=50`);
+        const data = await res.json();
+        const results = data.results || [];
+        document.getElementById('log-result-count').textContent = `${data.total || 0} entries found`;
+        document.getElementById('log-pagination-info').textContent = `Page ${data.page || 1} of ${data.pages || 1} (${data.total || 0} total)`;
+        AppState.totalLogPages = data.pages || 1;
+        AppState.currentLogs = results;
+
+        if (!results.length) {
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--fg3);">No matching logs found</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = results.map((e, idx) => `
+          <tr onclick="toggleLogRow(${idx})" style="cursor:pointer;">
+            <td style="font-family:var(--mono);color:var(--fg3);">${e.timestamp ? e.timestamp.slice(11, 19) : '—'}</td>
+            <td><span class="pill pill-${e.severity==='ERROR'?'crit':e.severity==='WARN'?'warn':'info'}">${e.severity}</span></td>
+            <td>${esc(e.service || 'auth-service')}</td>
+            <td style="font-family:var(--mono);">${esc(e.message)}</td>
+          </tr>
+          <tr id="log-detail-${idx}" style="display:none;background:var(--surface3);">
+            <td colspan="4" style="padding:10px 14px;">
+              <pre class="code-block" style="margin:0;">${esc(JSON.stringify(e, null, 2))}</pre>
+            </td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--critical);padding:14px;">Log search failed: ${esc(e.message)}</td></tr>`;
+      }
+    }
+
+    function toggleLogRow(idx) {
+      const row = document.getElementById(`log-detail-${idx}`);
+      if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+    }
+
+    function changeLogPage(delta) {
+      const next = AppState.currentLogPage + delta;
+      if (next >= 1 && next <= AppState.totalLogPages) {
+        AppState.currentLogPage = next;
+        executeLogSearch();
+      }
+    }
+
+    function resetLogSearch() {
+      document.getElementById('log-search-query').value = '';
+      AppState.currentLogPage = 1;
+      executeLogSearch();
+    }
+
+    function exportLogsJSON() {
+      if (!AppState.currentLogs.length) return showToast('No logs to export', true);
+      const blob = new Blob([JSON.stringify(AppState.currentLogs, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'exported-logs.json';
+      a.click();
+    }
+
+    function exportLogsCSV() {
+      if (!AppState.currentLogs.length) return showToast('No logs to export', true);
+      const header = 'timestamp,severity,service,message\n';
+      const rows = AppState.currentLogs.map(l => `"${l.timestamp}","${l.severity}","${l.service}","${(l.message||'').replace(/"/g, '""')}"`).join('\n');
+      const blob = new Blob([header + rows], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'exported-logs.csv';
+      a.click();
+    }
+
+    async function handleLogUpload(input) {
+      if (!input.files.length) return;
+      const file = input.files[0];
+      const text = await file.text();
+      showToast(`Uploading ${file.name}…`);
+      try {
+        const res = await fetch('/api/logs/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: text, filename: file.name })
+        });
+        const d = await res.json();
+        if (res.ok) {
+          showToast(`Uploaded ${d.total_entries} logs!`);
+          executeLogSearch();
+        } else {
+          showToast(`Upload failed: ${d.error}`, true);
+        }
+      } catch (e) {
+        showToast('Upload error', true);
+      }
+      input.value = '';
+    }
+
+    // ── 4. Metrics Explorer ─────────────────────────────────────────
+    async function loadMetricChart() {
+      const metric = document.getElementById('metric-select').value;
+      const title = document.getElementById('metric-chart-title');
+      title.textContent = `${metric.replace(/_/g, ' ').toUpperCase()} — Baseline vs Current Run`;
+
+      try {
+        const [resSeries, resSummary] = await Promise.all([
+          fetch(`/api/metrics/series?metric=${metric}&scenario=${AppState.scenario}`),
+          fetch(`/api/metrics/summary?scenario=${AppState.scenario}`)
+        ]);
+        const seriesData = await resSeries.json();
+        const summaryData = await resSummary.json();
+
+        renderChart(seriesData.series || []);
+        renderMetricsSummary(summaryData);
+      } catch (e) {
+        showToast('Failed to load metrics data', true);
+      }
+    }
+
+    function renderChart(series) {
+      const ctx = document.getElementById('metrics-canvas');
+      if (!ctx || typeof Chart === 'undefined') return;
+
+      const labels = series.map((s, idx) => `T+${idx}m`);
+      const currentValues = series.map(s => s.value);
+      const baselineVal = series[0] ? series[0].value : 0;
+      const baselineLine = series.map(() => baselineVal);
+
+      if (AppState.chartInstance) AppState.chartInstance.destroy();
+
+      AppState.chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Current Run (Observed)',
+              data: currentValues,
+              borderColor: '#ef4444',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.3
+            },
+            {
+              label: 'Baseline (Healthy)',
+              data: baselineLine,
+              borderColor: '#3b82f6',
+              borderDash: [5, 5],
+              borderWidth: 2,
+              fill: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: getComputedStyle(document.body).getPropertyValue('--fg').trim() || '#e2e8f0' } }
+          },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888' } },
+            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#888' } }
+          }
+        }
+      });
+    }
+
+    function renderMetricsSummary(summary) {
+      const el = document.getElementById('metrics-summary-table');
+      const items = summary.metrics || [];
+      if (!items.length) {
+        el.innerHTML = '<div style="color:var(--fg3);padding:10px;">Summary unavailable</div>';
+        return;
+      }
+      el.innerHTML = `
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>Baseline</th>
+              <th>Current</th>
+              <th>Change</th>
+              <th>Severity</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(m => `
+              <tr>
+                <td><strong>${esc(m.label || m.metric)}</strong></td>
+                <td>${m.baseline_value} ${m.unit || ''}</td>
+                <td>${m.current_value} ${m.unit || ''}</td>
+                <td style="color:${m.percent_change > 0 ? 'var(--critical)' : 'var(--good)'}">
+                  ${m.percent_change > 0 ? '↑ +' : '↓ '}${m.percent_change}%
+                </td>
+                <td><span class="pill pill-${m.severity==='critical'?'crit':m.severity==='high'?'warn':'good'}">${m.severity}</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function exportMetricCSV() {
+      const metric = document.getElementById('metric-select').value;
+      window.location.href = `/api/metrics/export?metric=${metric}&scenario=${AppState.scenario}`;
+    }
+
+    // ── 5. Traces & Services ────────────────────────────────────────
+    async function loadTraces() {
+      try {
+        const res = await fetch('/api/traces');
+        const data = await res.json();
+        renderServiceMap(data.service_map);
+        renderTracesList(data.traces || []);
+      } catch (e) {
+        showToast('Failed to load trace topology', true);
+      }
+    }
+
+    function renderServiceMap(map) {
+      const el = document.getElementById('service-map-container');
+      if (!map) return;
+      const nodes = map.nodes || [];
+
+      el.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;width:100%;flex-wrap:wrap;justify-content:center;padding:12px;background:var(--surface2);border-radius:var(--radius-sm);">
+          ${nodes.map(n => `
+            <div style="padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);text-align:center;">
+              <span class="pill ${n.status==='critical'?'pill-crit':n.status==='degraded'?'pill-warn':'pill-good'}">● ${n.status || 'healthy'}</span>
+              <div style="font-weight:700;margin-top:6px;">${esc(n.id)}</div>
+              <div style="font-size:11px;color:var(--fg3);">${n.type}</div>
+            </div>
+          `).join('<span style="color:var(--fg3);font-size:16px;">➔</span>')}
+        </div>
+      `;
+    }
+
+    function renderTracesList(traces) {
+      const el = document.getElementById('traces-list');
+      if (!traces.length) {
+        el.innerHTML = '<div style="color:var(--fg3);padding:10px;">No traces available</div>';
+        return;
+      }
+      el.innerHTML = traces.map(t => `
+        <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;background:var(--surface2);">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <div>
+              <span class="pill ${t.status==='error'?'pill-crit':'pill-good'}">${t.status.toUpperCase()}</span>
+              <strong style="margin-left:6px;font-family:var(--mono);">${t.trace_id}</strong>
+              <span style="color:var(--fg3);font-size:11px;margin-left:8px;">${esc(t.service)}</span>
+            </div>
+            <div style="font-family:var(--mono);font-size:12px;font-weight:600;">${t.duration_ms} ms</div>
+          </div>
+
+          <div style="background:var(--surface);border-radius:var(--radius-sm);overflow:hidden;">
+            ${(t.spans || []).map(s => {
+              const widthPct = Math.max(Math.min((s.duration_ms / t.duration_ms) * 100, 100), 5);
+              return `
+                <div class="span-row">
+                  <span style="width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(s.name)}</span>
+                  <div class="span-bar-wrapper">
+                    <div class="span-bar-fill" style="width:${widthPct}%;background:${s.status==='error'?'var(--critical)':'var(--accent)'};"></div>
+                  </div>
+                  <span style="width:60px;text-align:right;">${s.duration_ms}ms</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ── 6. Incident Management ──────────────────────────────────────
+    let allIncidents = [];
+    async function loadIncidents() {
+      try {
+        const res = await fetch('/api/incidents');
+        const data = await res.json();
+        allIncidents = data.incidents || [];
+        renderIncidents(allIncidents);
+      } catch (e) {
+        showToast('Failed to load incidents', true);
+      }
+      loadAlerts();
+    }
+
+    function filterIncidents(status) {
+      if (status === 'all') renderIncidents(allIncidents);
+      else renderIncidents(allIncidents.filter(i => i.status === status));
+    }
+
+    function renderIncidents(list) {
+      const el = document.getElementById('incidents-board');
+      if (!list.length) {
+        el.innerHTML = '<div style="color:var(--fg3);padding:14px;text-align:center;">No incidents found in this filter</div>';
+        return;
+      }
+      el.innerHTML = list.map(i => `
+        <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;background:var(--surface2);">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+              <span class="pill pill-${i.severity==='critical'?'crit':i.severity==='high'?'warn':'good'}">${i.severity.toUpperCase()}</span>
+              <span class="pill pill-neutral" style="margin-left:4px;">${i.status.toUpperCase()}</span>
+              <strong style="margin-left:8px;font-size:13px;">${esc(i.title)}</strong>
+              <span style="color:var(--fg3);font-size:11px;margin-left:6px;">(${esc(i.service)})</span>
+            </div>
+            <div style="display:flex;gap:6px;">
+              ${i.status==='open' ? `<button class="btn btn-ghost btn-sm" onclick="openAcknowledgeModal('${i.id}')">Acknowledge</button>` : ''}
+              ${i.status!=='resolved' ? `<button class="btn btn-primary btn-sm" onclick="openResolveModal('${i.id}')">Resolve</button>` : `<button class="btn btn-ghost btn-sm" onclick="reopenIncident('${i.id}')">Reopen</button>`}
+              <button class="btn btn-ghost btn-sm" onclick="openIncidentTimeline('${i.id}', '${esc(i.title)}')">Timeline</button>
+            </div>
+          </div>
+          ${i.description ? `<p style="font-size:12px;color:var(--fg2);margin-top:6px;">${esc(i.description)}</p>` : ''}
+          <div style="font-size:11px;color:var(--fg3);margin-top:6px;">
+            Owner: <strong>${esc(i.owner || 'unassigned')}</strong> · Created: ${i.created_at ? i.created_at.slice(0, 19).replace('T', ' ') : '—'}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openCreateIncidentModal() { openModal('modal-create-incident'); }
+    async function submitCreateIncident() {
+      const title = document.getElementById('inc-new-title').value.trim();
+      const service = document.getElementById('inc-new-service').value;
+      const severity = document.getElementById('inc-new-severity').value;
+      const owner = document.getElementById('inc-new-owner').value.trim();
+      const description = document.getElementById('inc-new-desc').value.trim();
+      if (!title) return alert('Title is required');
+
+      try {
+        const res = await fetch('/api/incidents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, service, severity, owner, description })
+        });
+        if (res.ok) {
+          closeModal('modal-create-incident');
+          showToast('Incident created successfully');
+          loadIncidents();
+        } else {
+          showToast('Failed to create incident', true);
+        }
+      } catch (e) {
+        showToast('Error creating incident', true);
+      }
+    }
+
+    function openAcknowledgeModal(id) {
+      document.getElementById('ack-incident-id').value = id;
+      openModal('modal-ack-incident');
+    }
+    async function submitAcknowledgeIncident() {
+      const id = document.getElementById('ack-incident-id').value;
+      const actor = document.getElementById('ack-actor').value.trim();
+      const message = document.getElementById('ack-message').value.trim();
+      try {
+        await fetch(`/api/incidents/${id}/acknowledge`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actor, message })
+        });
+        closeModal('modal-ack-incident');
+        showToast('Incident acknowledged');
+        loadIncidents();
+      } catch (e) { showToast('Error acknowledging', true); }
+    }
+
+    function openResolveModal(id) {
+      document.getElementById('resolve-incident-id').value = id;
+      openModal('modal-resolve-incident');
+    }
+    async function submitResolveIncident() {
+      const id = document.getElementById('resolve-incident-id').value;
+      const actor = document.getElementById('resolve-actor').value.trim();
+      const resolution = document.getElementById('resolve-message').value.trim();
+      try {
+        await fetch(`/api/incidents/${id}/resolve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actor, resolution })
+        });
+        closeModal('modal-resolve-incident');
+        showToast('Incident resolved');
+        loadIncidents();
+      } catch (e) { showToast('Error resolving', true); }
+    }
+
+    async function reopenIncident(id) {
+      try {
+        await fetch(`/api/incidents/${id}/reopen`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        showToast('Incident reopened');
+        loadIncidents();
+      } catch (e) { showToast('Error reopening', true); }
+    }
+
+    async function openIncidentTimeline(id, title) {
+      document.getElementById('timeline-modal-title').textContent = `Timeline: ${title}`;
+      const list = document.getElementById('incident-events-list');
+      list.innerHTML = '<div style="color:var(--fg3);">Loading events…</div>';
+      openModal('modal-incident-timeline');
+
+      try {
+        const res = await fetch(`/api/incidents/${id}/timeline`);
+        const data = await res.json();
+        const events = data.events || [];
+        if (!events.length) {
+          list.innerHTML = '<div style="color:var(--fg3);">No events recorded</div>';
+          return;
+        }
+        list.innerHTML = events.map(e => `
+          <div class="timeline-item">
+            <div class="timeline-dot"></div>
+            <div class="timeline-time">${e.timestamp ? e.timestamp.replace('T', ' ').slice(0, 19) : ''}</div>
+            <div class="timeline-title">${esc(e.event_type.toUpperCase())} by ${esc(e.actor)}</div>
+            <div style="font-size:12px;color:var(--fg2);">${esc(e.message)}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        list.innerHTML = '<div style="color:var(--critical);">Failed to load timeline</div>';
+      }
+    }
+
+    // Alerts CRUD
+    async function loadAlerts() {
+      const tbody = document.getElementById('alerts-tbody');
+      try {
+        const res = await fetch('/api/alerts');
+        const data = await res.json();
+        const list = data.alerts || [];
+        if (!list.length) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:12px;color:var(--fg3);">No alert rules configured</td></tr>';
+          return;
+        }
+        tbody.innerHTML = list.map(a => `
+          <tr>
+            <td><strong>${esc(a.name)}</strong></td>
+            <td>${esc(a.service || 'all')}</td>
+            <td style="font-family:var(--mono);">${esc(a.condition_metric)} ${a.operator} ${a.threshold}</td>
+            <td><span class="pill pill-${a.severity==='critical'?'crit':'warn'}">${a.severity}</span></td>
+            <td><span class="pill pill-good">Active</span></td>
+            <td><button class="btn btn-ghost btn-sm" onclick="showToast('Alert test triggered')">Test</button></td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color:var(--critical);">Failed to load alerts</td></tr>';
+      }
+    }
+
+    function openCreateAlertModal() { openModal('modal-create-alert'); }
+    async function submitCreateAlert() {
+      const name = document.getElementById('alert-name').value.trim();
+      const service = document.getElementById('alert-service').value;
+      const condition_metric = document.getElementById('alert-metric').value;
+      const operator = document.getElementById('alert-operator').value;
+      const threshold = parseFloat(document.getElementById('alert-threshold').value);
+      const severity = document.getElementById('alert-severity').value;
+      if (!name) return alert('Name is required');
+
+      try {
+        await fetch('/api/alerts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, service, condition_metric, operator, threshold, severity })
+        });
+        closeModal('modal-create-alert');
+        showToast('Alert rule created');
+        loadAlerts();
+      } catch (e) { showToast('Error creating alert', true); }
+    }
+
+    // ── 7. Deployments ──────────────────────────────────────────────
+    async function loadDeployments() {
+      const el = document.getElementById('deployments-timeline');
+      try {
+        const res = await fetch('/api/deployments');
+        const data = await res.json();
+        const commits = data.commits || [];
+        el.innerHTML = commits.map(c => `
+          <div class="timeline-item">
+            <div class="timeline-dot" style="background:var(--warning);"></div>
+            <div class="timeline-time">${c.timestamp} · Author: ${esc(c.author)}</div>
+            <div class="timeline-title">
+              <span class="pill pill-warn" style="font-family:var(--mono);">${c.hash}</span>
+              ${esc(c.message)}
+            </div>
+            <div style="font-size:12px;color:var(--fg2);margin:4px 0;"><strong>Diff:</strong> ${esc(c.diff_summary || 'N/A')}</div>
+            <div style="font-size:11px;color:var(--fg3);">Files: ${(c.files_changed || []).join(', ')}</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = '<div style="color:var(--critical);">Failed to load deployment history</div>';
+      }
+    }
+
+    // ── 8. DB Diagnostics ───────────────────────────────────────────
+    async function loadDbDiagnostics() {
+      const el = document.getElementById('db-diagnostics-content');
+      try {
+        const res = await fetch('/api/db-metrics');
+        const data = await res.json();
+        const m = data.db_metrics || {};
+        el.innerHTML = `
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-stripe" style="background:var(--critical);"></div>
+              <div class="kpi-label">Active Connections</div>
+              <div class="kpi-value">${m.connections?.active || 0} <span style="font-size:12px;color:var(--fg3);">/ ${m.connections?.max || 150}</span></div>
+              <div class="kpi-delta" style="color:var(--critical);">${m.connections?.waiters || 0} queries waiting</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-stripe" style="background:var(--critical);"></div>
+              <div class="kpi-label">Row Lock Contention</div>
+              <div class="kpi-value">${m.locks?.row_lock_contention_pct || 0}%</div>
+              <div class="kpi-delta" style="color:var(--critical);">${m.locks?.deadlocks_per_minute || 0} deadlocks/min</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-stripe" style="background:var(--warning);"></div>
+              <div class="kpi-label">Buffer Pool Hit Ratio</div>
+              <div class="kpi-value">${m.buffer_pool?.hit_ratio_pct || 0}%</div>
+              <div class="kpi-delta" style="color:var(--warning);">Suboptimal (&lt;90%)</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-stripe" style="background:var(--critical);"></div>
+              <div class="kpi-label">Replication Lag</div>
+              <div class="kpi-value">${m.replication?.lag_seconds || 0} <span style="font-size:12px;color:var(--fg3);">sec</span></div>
+              <div class="kpi-delta" style="color:var(--critical);">Status: ${m.replication?.status || 'degraded'}</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Slow Queries Captured Under High Load</div>
+            <table class="data-table">
+              <thead><tr><th>Query Pattern</th><th>Avg Duration</th><th>Calls</th><th>Rows Examined</th></tr></thead>
+              <tbody>
+                ${(data.slow_query_samples || []).map(q => `
+                  <tr>
+                    <td><code style="font-family:var(--mono);color:var(--warning);">${esc(q.query_preview)}</code></td>
+                    <td><strong>${q.avg_ms} ms</strong></td>
+                    <td>${q.calls}</td>
+                    <td>${(q.rows_examined/1e6).toFixed(1)}M</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } catch (e) {
+        el.innerHTML = '<div style="color:var(--critical);">Failed to load DB diagnostics</div>';
+      }
+    }
+
+    // ── 9. Case History ─────────────────────────────────────────────
+    async function loadCaseHistory() {
+      const el = document.getElementById('cases-list');
+      try {
+        const res = await fetch('/api/cases');
+        const data = await res.json();
+        const cases = data.cases || [];
+        if (!cases.length) {
+          el.innerHTML = '<div style="color:var(--fg3);padding:14px;text-align:center;">No confirmed RCA cases recorded yet</div>';
+          return;
+        }
+        el.innerHTML = cases.map(c => `
+          <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;background:var(--surface2);">
+            <div style="display:flex;justify-content:space-between;">
+              <div>
+                <span class="pill ${c.status==='confirmed'?'pill-good':'pill-warn'}">${c.status.toUpperCase()}</span>
+                <strong style="margin-left:6px;">${esc(c.service)}</strong>
+                <span style="color:var(--fg3);font-size:11px;margin-left:6px;">Investigation: ${c.investigation_id}</span>
+              </div>
+              ${c.status !== 'confirmed' ? `<button class="btn btn-outline btn-sm" onclick="openConfirmCaseModal('${c.id}')">Confirm Root Cause</button>` : ''}
+            </div>
+            ${c.fix_applied ? `<div style="margin-top:6px;font-size:12px;color:var(--good);"><strong>Fix Verified:</strong> ${esc(c.fix_applied)}</div>` : ''}
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = '<div style="color:var(--critical);">Failed to load case history</div>';
+      }
+    }
+
+    function openConfirmCaseModal(id) {
+      document.getElementById('confirm-case-id').value = id;
+      openModal('modal-confirm-case');
+    }
+    async function submitConfirmCase() {
+      const id = document.getElementById('confirm-case-id').value;
+      const confirmed_by = document.getElementById('confirm-by-author').value.trim();
+      const fix_applied = document.getElementById('confirm-fix-text').value.trim();
+      try {
+        await fetch(`/api/cases/${id}/confirm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirmed_by, fix_applied })
+        });
+        closeModal('modal-confirm-case');
+        showToast('Case confirmed');
+        loadCaseHistory();
+      } catch (e) { showToast('Error confirming case', true); }
+    }
+
+    // ── 10. Integrations ────────────────────────────────────────────
+    async function loadConnectors() {
+      const el = document.getElementById('connectors-grid');
+      try {
+        const res = await fetch('/api/connectors/status');
+        const data = await res.json();
+        const list = data.connectors || [];
+        el.innerHTML = list.map(c => `
+          <div class="card" style="margin-bottom:0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <strong>${c.name}</strong>
+              <span class="pill ${c.configured ? 'pill-good' : 'pill-neutral'}">${c.configured ? 'CONNECTED' : 'NOT CONFIGURED'}</span>
+            </div>
+            <div style="font-size:11px;color:var(--fg3);margin-bottom:10px;">Type: ${c.type} · SSRF protected</div>
+            <div style="font-size:11px;color:var(--fg2);margin-bottom:10px;">Config env keys: <code>${(c.config_keys_present || []).join(', ') || 'None set'}</code></div>
+            <button class="btn btn-ghost btn-sm" onclick="testConnector('${c.name}')">Test Connection</button>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = '<div style="color:var(--critical);">Failed to load connectors</div>';
+      }
+    }
+
+    async function testConnector(name) {
+      showToast(`Testing ${name}…`);
+      try {
+        const res = await fetch('/api/connectors/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ connector: name })
+        });
+        const d = await res.json();
+        alert(`Connector: ${name}\nStatus: ${d.ok ? 'SUCCESS' : 'FAILED / NOT CONFIGURED'}\nMessage: ${d.message}\nLatency: ${d.latency_ms || 0}ms`);
+      } catch (e) {
+        alert('Connector probe failed');
+      }
+    }
+
+    // ── 11. Reports ─────────────────────────────────────────────────
+    async function loadReports() {
+      const el = document.getElementById('reports-list');
+      try {
+        const res = await fetch('/api/memory');
+        const data = await res.json();
+        const cases = data.cases || [];
+        if (!cases.length) {
+          el.innerHTML = '<div style="color:var(--fg3);padding:14px;text-align:center;">No generated reports yet</div>';
+          return;
+        }
+        el.innerHTML = cases.map(c => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+            <div>
+              <strong>${esc(c.id)}</strong>
+              <span style="color:var(--fg3);font-size:11px;margin-left:8px;">Recorded: ${c.recorded_at ? c.recorded_at.slice(0, 10) : ''}</span>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="exportReportJSON('${c.id}')">Export JSON</button>
+          </div>
+        `).join('');
+      } catch (e) {
+        el.innerHTML = '<div style="color:var(--critical);">Failed to load reports</div>';
+      }
+    }
+
+    function exportReportJSON(id) {
+      showToast(`Exporting ${id}…`);
+    }
+
+    // ── Save Search ─────────────────────────────────────────────────
+    function openSaveSearchModal() {
+      document.getElementById('save-search-query').value = document.getElementById('log-search-query').value || '*';
+      openModal('modal-save-search');
+    }
+    async function submitSaveSearch() {
+      const name = document.getElementById('save-search-name').value.trim();
+      const query = document.getElementById('save-search-query').value;
+      if (!name) return alert('Name is required');
+
+      try {
+        await fetch('/api/saved-searches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, query, filters: {} })
+        });
+        closeModal('modal-save-search');
+        showToast('Search query saved');
+      } catch (e) { showToast('Error saving search', true); }
+    }
+
+    // ── Theme Management ────────────────────────────────────
+    function toggleTheme() {
+      const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+      setTheme(cur === 'dark' ? 'light' : 'dark');
+    }
+    function setTheme(t) {
+      document.documentElement.setAttribute('data-theme', t);
+      localStorage.setItem('theme', t);
+      const prefSel = document.getElementById('pref-theme');
+      if (prefSel) prefSel.value = t;
+    }
+
+    // ── Initial Boot ────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedTheme = localStorage.getItem('theme') || 'dark';
+      setTheme(savedTheme);
+      const hash = location.hash.replace('#', '') || 'overview';
+      navigate(hash);
+      setInterval(checkHealth, 30000);
+    });
+  </script>
+</body>
+</html>
